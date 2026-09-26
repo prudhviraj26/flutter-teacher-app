@@ -194,6 +194,7 @@ class ProfileScreen extends StatelessWidget {
                       const Divider(color: Color(0xFFF3F4F6)),
                       const SizedBox(height: 12),
                       
+                      _buildInfoRow('School', appState.currentSchoolName),
                       _buildInfoRow(appState.translate('employeeId'), teacher.employeeId),
                       _buildInfoRow(appState.translate('mobile'), teacher.mobile),
                       _buildInfoRow(appState.translate('email'), teacher.email),

@@ -46,6 +46,28 @@ class AttendanceRollCallScreen extends StatelessWidget {
             ),
           ),
           
+          if (appState.isAttendanceSubmittedToday)
+            Container(
+              color: const Color(0xFFECFDF5),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle, color: Color(0xFF10B981), size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Attendance already submitted for today. You can edit and re-submit changes below.',
+                      style: TextStyle(
+                        color: Color(0xFF065F46),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          
           // Student List
           Expanded(
             child: ListView.builder(
@@ -85,11 +107,13 @@ class AttendanceRollCallScreen extends StatelessWidget {
                                 color: Color(0xFF1F2937),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Roll No: ${student.rollNo}',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            ),
+                            if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Roll No: ${student.rollNo}',
+                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
                           ],
                         ),
                         
@@ -160,7 +184,7 @@ class AttendanceRollCallScreen extends StatelessWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: Text(
-                  appState.translate('submit'),
+                  appState.isAttendanceSubmittedToday ? 'Review & Submit Changes' : appState.translate('submit'),
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
@@ -299,10 +323,12 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                             s.name,
                             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
                           ),
-                          subtitle: Text(
-                            'Roll No: ${s.rollNo}',
-                            style: TextStyle(color: Colors.red.shade700, fontSize: 11),
-                          ),
+                          subtitle: (s.rollNo.isNotEmpty && s.rollNo != '1')
+                              ? Text(
+                                  'Roll No: ${s.rollNo}',
+                                  style: TextStyle(color: Colors.red.shade700, fontSize: 11),
+                                )
+                              : null,
                         ),
                       );
                     },
@@ -321,19 +347,38 @@ class AttendanceConfirmationScreen extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  appState.submitAttendance(appState.teacher?.id ?? 'T001');
-                  Navigator.pushReplacementNamed(context, '/attendance/submitted');
-                },
+                onPressed: appState.isSubmittingAttendance
+                    ? null
+                    : () async {
+                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
+                        if (context.mounted) {
+                          if (success) {
+                            Navigator.pushReplacementNamed(context, '/attendance/submitted');
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Failed to submit attendance. Please try again.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text(
-                  appState.translate('confirm'),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
+                child: appState.isSubmittingAttendance
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text(
+                        appState.translate('confirm'),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
               ),
             ),
           ),
@@ -557,11 +602,13 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                                 color: Color(0xFF1F2937),
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Roll No: ${student.rollNo}',
-                              style: const TextStyle(fontSize: 11, color: Colors.grey),
-                            ),
+                            if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Roll No: ${student.rollNo}',
+                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
                           ],
                         ),
                         
@@ -625,27 +672,40 @@ class AttendanceCorrectionScreen extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  appState.submitAttendance(appState.teacher?.id ?? 'T001');
-                  // Trigger correction completed toast
-                  ScaffoldMessenger.of(context).clearSnackBars();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(appState.translate('attendanceCorrected')),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                  Navigator.pushReplacementNamed(context, '/home');
-                },
+                onPressed: appState.isSubmittingAttendance
+                    ? null
+                    : () async {
+                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(success
+                                  ? appState.translate('attendanceCorrected')
+                                  : 'Failed to update attendance'),
+                              backgroundColor: success ? AppColors.success : Colors.red,
+                            ),
+                          );
+                          if (success) {
+                            Navigator.pushReplacementNamed(context, '/home');
+                          }
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   backgroundColor: AppColors.primary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: Text(
-                  appState.translate('save'),
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
+                child: appState.isSubmittingAttendance
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : Text(
+                        appState.translate('save'),
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
               ),
             ),
           ),

@@ -114,7 +114,9 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                                     ),
                                     subtitle: Text(
-                                      'Roll No: ${student.rollNo} • ${student.studentClass}',
+                                      (student.rollNo.isNotEmpty && student.rollNo != '1')
+                                          ? 'Roll No: ${student.rollNo} • ${student.studentClass}'
+                                          : student.studentClass,
                                       style: const TextStyle(fontSize: 11, color: Colors.grey),
                                     ),
                                     trailing: Column(

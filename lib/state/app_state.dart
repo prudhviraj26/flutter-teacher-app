@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../constants/translations.dart';
+import '../services/auth_service.dart';
+import '../services/teacher_data_service.dart';
 
 class AppState extends ChangeNotifier {
   SharedPreferences? _prefs;
@@ -30,11 +32,19 @@ class AppState extends ChangeNotifier {
   // Active Attendance Marking Session
   Map<String, String> _tempAttendance = {}; // studentId -> status ('P' | 'A')
 
+  bool _isLoadingStudents = false;
+  bool _isAttendanceSubmittedToday = false;
+  bool _isSubmittingAttendance = false;
+
   // Getters
   String get language => _language;
   bool get loggedIn => _loggedIn;
   Teacher? get teacher => _teacher;
   String? get profilePic => _profilePic;
+  String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
+  bool get isLoadingStudents => _isLoadingStudents;
+  bool get isAttendanceSubmittedToday => _isAttendanceSubmittedToday;
+  bool get isSubmittingAttendance => _isSubmittingAttendance;
 
   final SchoolConfig schoolConfig = SchoolConfig(
     name: 'Demo International School',
@@ -91,6 +101,75 @@ class AppState extends ChangeNotifier {
     }
     
     notifyListeners();
+
+    if (_loggedIn) {
+      loadLiveData();
+    }
+  }
+
+  // Load Live Data from NestJS API
+  Future<void> loadLiveData() async {
+    if (!_loggedIn) return;
+
+    _isLoadingStudents = true;
+    notifyListeners();
+
+    try {
+      // Refresh current teacher details from /auth/me if available
+      try {
+        final meResponse = await AuthService.getMe();
+        final userMap = meResponse['user'] as Map<String, dynamic>?;
+        if (userMap != null) {
+          final String firstName = userMap['firstName'] ?? '';
+          final String lastName = userMap['lastName'] ?? '';
+          final String fullName = "$firstName $lastName".trim();
+          final String role = userMap['role'] ?? 'class_teacher';
+
+          final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
+          final String apiAssignedClass = userMap['assignedClass'] as String? ?? 'Class Teacher';
+          final String? apiSectionId = userMap['sectionId'] as String?;
+          final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+
+          _teacher = Teacher(
+            id: userMap['id'] ?? 'T001',
+            name: fullName.isNotEmpty ? fullName : 'Teacher',
+            employeeId: apiEmployeeId,
+            mobile: userMap['mobile'] ?? (_teacher?.mobile ?? ''),
+            email: userMap['email'] ?? '',
+            designation: role == 'class_teacher' ? 'Class Teacher' : 'Subject Teacher',
+            assignedClass: apiAssignedClass,
+            sectionId: apiSectionId,
+            subjects: userMap['subjects'] != null ? List<String>.from(userMap['subjects']) : ['General'],
+            joiningDate: userMap['joiningDate'] ?? '01-06-2022',
+            schoolName: apiSchoolName,
+          );
+        }
+      } catch (e) {
+        debugPrint("AuthService.getMe error during loadLiveData: $e");
+      }
+
+      final String? teacherSectionId = _teacher?.sectionId;
+      var liveStudents = await TeacherDataService.fetchStudents(sectionId: teacherSectionId);
+      if (liveStudents.isEmpty && teacherSectionId != null) {
+        // Fallback to fetch all students in school if section filter returns empty
+        liveStudents = await TeacherDataService.fetchStudents();
+      }
+      _students = liveStudents;
+
+      final liveAnnouncements = await TeacherDataService.fetchBroadcasts();
+      _announcements = liveAnnouncements;
+
+      // Clear mock lists from demo school for authenticated API session
+      _parentConversations = [];
+      _classUpdates = [];
+
+      initTempAttendance();
+    } catch (e) {
+      debugPrint("Error loading live data from backend: $e");
+    } finally {
+      _isLoadingStudents = false;
+      notifyListeners();
+    }
   }
 
   // i18n Translate Helper
@@ -129,6 +208,55 @@ class AppState extends ChangeNotifier {
   Future<bool> login(String mobile, String password) async {
     if (mobile.isEmpty || password.isEmpty) return false;
 
+    try {
+      final response = await AuthService.login(
+        emailOrMobile: mobile,
+        password: password,
+      );
+
+      final userMap = response['user'] as Map<String, dynamic>?;
+      if (userMap != null) {
+        final String firstName = userMap['firstName'] ?? '';
+        final String lastName = userMap['lastName'] ?? '';
+        final String fullName = "$firstName $lastName".trim();
+        final String role = userMap['role'] ?? 'class_teacher';
+
+        final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
+        final String apiAssignedClass = userMap['assignedClass'] as String? ?? 'Class Teacher';
+        final String? apiSectionId = userMap['sectionId'] as String?;
+        final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+
+        final loadedTeacher = Teacher(
+          id: userMap['id'] ?? 'T001',
+          name: fullName.isNotEmpty ? fullName : 'Teacher',
+          employeeId: apiEmployeeId,
+          mobile: userMap['mobile'] ?? mobile,
+          email: userMap['email'] ?? '',
+          designation: role == 'class_teacher' ? 'Class Teacher' : 'Subject Teacher',
+          assignedClass: apiAssignedClass,
+          sectionId: apiSectionId,
+          subjects: userMap['subjects'] != null ? List<String>.from(userMap['subjects']) : ['General'],
+          joiningDate: userMap['joiningDate'] ?? '01-06-2022',
+          schoolName: apiSchoolName,
+        );
+
+        _loggedIn = true;
+        _teacher = loadedTeacher;
+
+        final userData = {
+          'loggedIn': true,
+          'teacher': loadedTeacher.toJson(),
+        };
+        await _prefs?.setString('veyho_teacher_user', json.encode(userData));
+        _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
+        await loadLiveData();
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint("API login failed, checking demo fallback: $e");
+    }
+
     // Standard school accounts mapping from mockData.ts
     // Mobile 9999999999 = Class Teacher (Mrs. Priya Patel)
     // Mobile 1111111111 = Subject Teacher (Mr. Arjun Desai)
@@ -149,6 +277,7 @@ class AppState extends ChangeNotifier {
         assignedClass: 'Grade 3-B',
         subjects: ['Mathematics', 'Science'],
         joiningDate: '01-06-2020',
+        schoolName: 'Demo International School',
       );
     } else {
       loadedTeacher = Teacher(
@@ -161,6 +290,7 @@ class AppState extends ChangeNotifier {
         assignedClasses: ['Grade 3-A', 'Grade 3-B', 'Grade 4-A', 'Grade 4-B'],
         subjects: ['English'],
         joiningDate: '15-07-2019',
+        schoolName: 'Demo International School',
       );
     }
 
@@ -183,6 +313,7 @@ class AppState extends ChangeNotifier {
 
   // Logout Logic
   Future<void> logout() async {
+    await AuthService.logout();
     _loggedIn = false;
     _teacher = null;
     _profilePic = null;
@@ -216,9 +347,12 @@ class AppState extends ChangeNotifier {
 
   // Active Attendance operations
   void initTempAttendance() {
-    _tempAttendance = {};
+    final validIds = _students.map((s) => s.id).toSet();
+    _tempAttendance.removeWhere((key, value) => !validIds.contains(key));
     for (var s in _students) {
-      _tempAttendance[s.id] = 'P';
+      if (!_tempAttendance.containsKey(s.id)) {
+        _tempAttendance[s.id] = 'P';
+      }
     }
   }
 
@@ -227,33 +361,118 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void submitAttendance(String teacherId) {
-    final List<AttendanceRecord> records = [];
-    _tempAttendance.forEach((studentId, status) {
-      records.add(AttendanceRecord(studentId: studentId, status: status));
-      
-      // Update local student status directly
-      final idx = _students.indexWhere((s) => s.id == studentId);
-      if (idx != -1) {
-        _students[idx].absentToday = status == 'A';
-      }
-    });
+  Future<void> fetchTodayAttendanceSession() async {
+    final String? sectionId = _teacher?.sectionId;
+    if (sectionId == null || sectionId.isEmpty) return;
 
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-    _attendanceHistory.insert(
-      0,
-      DailyAttendance(
-        date: dateStr,
-        classTarget: _teacher?.assignedClass ?? 'Grade 3-B',
-        records: records,
-        submittedBy: teacherId,
-        submittedAt: "$dateStr $timeStr",
-      ),
-    );
+    try {
+      final sessionData = await TeacherDataService.fetchAttendanceSession(sectionId, dateStr);
+      if (sessionData != null && sessionData['session'] != null) {
+        _isAttendanceSubmittedToday = true;
+        final List? sessionStudents = sessionData['students'] as List?;
+        if (sessionStudents != null) {
+          final Map<String, String> fetchedTemp = {};
+          final List<AttendanceRecord> records = [];
+
+          for (var item in sessionStudents) {
+            if (item is Map<String, dynamic>) {
+              final studentId = item['studentId'] as String?;
+              final currentRecord = item['currentRecord'] as Map<String, dynamic>?;
+              final statusStr = currentRecord?['status'] as String?;
+
+              if (studentId != null) {
+                final isAbsent = statusStr == 'absent';
+                final status = isAbsent ? 'A' : 'P';
+                fetchedTemp[studentId] = status;
+
+                final idx = _students.indexWhere((s) => s.id == studentId);
+                if (idx != -1) {
+                  _students[idx].absentToday = isAbsent;
+                }
+                records.add(AttendanceRecord(studentId: studentId, status: status));
+              }
+            }
+          }
+
+          if (fetchedTemp.isNotEmpty) {
+            _tempAttendance = fetchedTemp;
+          }
+
+          final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+          _attendanceHistory = [
+            DailyAttendance(
+              date: dateStr,
+              classTarget: _teacher?.assignedClass ?? 'Nursery A',
+              records: records,
+              submittedBy: _teacher?.id ?? 'T001',
+              submittedAt: "$dateStr $timeStr",
+            )
+          ];
+        }
+      } else {
+        _isAttendanceSubmittedToday = false;
+        initTempAttendance();
+      }
+    } catch (e) {
+      debugPrint("Error fetching today's attendance session: $e");
+    }
     notifyListeners();
+  }
+
+  Future<bool> submitAttendance(String teacherId) async {
+    _isSubmittingAttendance = true;
+    notifyListeners();
+
+    final String? sectionId = _teacher?.sectionId;
+    final now = DateTime.now();
+    final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    final List<Map<String, String>> apiRecords = [];
+    final List<AttendanceRecord> localRecords = [];
+
+    // Strictly build records from current section students list only
+    for (var s in _students) {
+      final status = _tempAttendance[s.id] ?? 'P';
+      apiRecords.add({
+        'studentId': s.id,
+        'status': status == 'P' ? 'present' : 'absent',
+      });
+      localRecords.add(AttendanceRecord(studentId: s.id, status: status));
+      s.absentToday = (status == 'A');
+    }
+
+    bool success = true;
+    if (sectionId != null && sectionId.isNotEmpty) {
+      success = await TeacherDataService.submitAttendance(
+        sectionId: sectionId,
+        date: dateStr,
+        records: apiRecords,
+      );
+    }
+
+    if (success) {
+      _isAttendanceSubmittedToday = true;
+      final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+
+      _attendanceHistory.removeWhere((h) => h.date == dateStr);
+      _attendanceHistory.insert(
+        0,
+        DailyAttendance(
+          date: dateStr,
+          classTarget: _teacher?.assignedClass ?? 'Nursery A',
+          records: localRecords,
+          submittedBy: teacherId,
+          submittedAt: "$dateStr $timeStr",
+        ),
+      );
+    }
+
+    _isSubmittingAttendance = false;
+    notifyListeners();
+    return success;
   }
 
   // Parent chats operations

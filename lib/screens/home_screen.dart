@@ -25,11 +25,7 @@ class HomeScreen extends StatelessWidget {
         .where((c) => c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
         .length;
 
-    final String schoolName = appState.language == 'mr'
-        ? appState.schoolConfig.nameMarathi
-        : appState.language == 'hi'
-            ? appState.schoolConfig.nameHindi
-            : appState.schoolConfig.name;
+    final String schoolName = appState.currentSchoolName;
 
     final String designationText = teacher.designation == 'Class Teacher'
         ? appState.translate('classTeacher')
@@ -182,9 +178,11 @@ class HomeScreen extends StatelessWidget {
                         title: appState.translate('attendance'),
                         subtitle: appState.translate('markDailyAttendance'),
                         backgroundColor: AppColors.primary,
-                        onTap: () {
-                          appState.initTempAttendance();
-                          Navigator.pushNamed(context, '/attendance');
+                        onTap: () async {
+                          await appState.fetchTodayAttendanceSession();
+                          if (context.mounted) {
+                            Navigator.pushNamed(context, '/attendance');
+                          }
                         },
                       ),
                       // Students

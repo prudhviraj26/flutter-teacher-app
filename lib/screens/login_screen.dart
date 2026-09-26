@@ -15,6 +15,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -24,6 +25,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin(BuildContext context, AppState appState) async {
+    if (_isLoading) return;
+
     final mobile = _mobileController.text;
     final password = _passwordController.text;
 
@@ -36,7 +39,18 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+    });
+
     final success = await appState.login(mobile, password);
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+
     if (success) {
       if (context.mounted) {
         Navigator.pushReplacementNamed(context, '/home');
@@ -67,11 +81,11 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final String schoolName = appState.language == 'mr'
-        ? 'डेमो आंतरराष्ट्रीय शाळा'
+    final String orgName = appState.language == 'mr'
+        ? 'वेहो टेक्नॉलॉजीज'
         : appState.language == 'hi'
-            ? 'डेमो इंटरनेशनल स्कूल'
-            : 'Demo International School';
+            ? 'वेहो टेक्नोलॉजीज'
+            : 'Veyho';
 
     return Scaffold(
       backgroundColor: AppColors.primary,
@@ -116,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    schoolName,
+                    orgName,
                     style: const TextStyle(
                       color: Color(0xFF1F2937),
                       fontSize: 20,
@@ -204,7 +218,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   
                   // Login Button
                   ElevatedButton(
-                    onPressed: () => _handleLogin(context, appState),
+                    onPressed: _isLoading ? null : () => _handleLogin(context, appState),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: AppColors.secondary,
@@ -214,14 +228,23 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                     ),
-                    child: Text(
-                      appState.translate("login"),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            appState.translate("login"),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                   
                   // Forgot Password Button

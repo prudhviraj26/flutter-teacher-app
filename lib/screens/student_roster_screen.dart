@@ -16,6 +16,17 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
   String _activeFilter = 'all'; // 'all' | 'absent' | 'fees' | 'attendance'
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = Provider.of<AppState>(context, listen: false);
+      if (appState.students.isEmpty) {
+        appState.loadLiveData();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
@@ -240,104 +251,122 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
           
           // Student List
           Expanded(
-            child: filteredStudents.isNotEmpty
-                ? ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                    itemCount: filteredStudents.length,
-                    itemBuilder: (context, index) {
-                      final s = filteredStudents[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: const [
-                              BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2))
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => StudentProfileScreen(studentId: s.id),
+            child: appState.isLoadingStudents
+                ? const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.primary,
+                    ),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () => appState.loadLiveData(),
+                    color: AppColors.primary,
+                    child: filteredStudents.isNotEmpty
+                        ? ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                            itemCount: filteredStudents.length,
+                            itemBuilder: (context, index) {
+                              final s = filteredStudents[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: const [
+                                      BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2))
+                                    ],
+                                  ),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => StudentProfileScreen(studentId: s.id),
+                                        ),
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(16),
+                                      child: Row(
+                                        children: [
+                                          // Roll avatar
+                                          Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
+                                            alignment: Alignment.center,
+                                             child: Text(
+                                               (s.rollNo.isNotEmpty && s.rollNo != '1')
+                                                   ? s.rollNo
+                                                   : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
+                                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                             ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          
+                                          // Info
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  s.name,
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1F2937)),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '${s.enrollmentNo} • ${s.gender}',
+                                                  style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                                                ),
+                                                
+                                                // Specific Status badges
+                                                if (s.absentToday || s.feeDefaulter || s.attendancePercentage < 75) ...[
+                                                  const SizedBox(height: 8),
+                                                  Wrap(
+                                                    spacing: 4,
+                                                    runSpacing: 4,
+                                                    children: [
+                                                      if (s.absentToday)
+                                                        _buildStatusBadge('Absent Today', Colors.red.shade50, Colors.red.shade600),
+                                                      if (s.feeDefaulter)
+                                                        _buildStatusBadge('Fee Due', AppColors.secondary.withOpacity(0.1), AppColors.secondary),
+                                                      if (s.attendancePercentage < 75)
+                                                        _buildStatusBadge('Attn: ${s.attendancePercentage.toInt()}%', Colors.red.shade50, Colors.red.shade600),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          const Icon(Icons.person, color: Colors.grey, size: 20),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               );
                             },
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Row(
-                                children: [
-                                  // Roll avatar
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      s.rollNo,
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                          )
+                        : ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                              const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.person_outline, size: 48, color: Colors.grey),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      'No students found',
+                                      style: TextStyle(color: Colors.grey, fontSize: 14),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  
-                                  // Info
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          s.name,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1F2937)),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${s.enrollmentNo} • ${s.gender}',
-                                          style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
-                                        ),
-                                        
-                                        // Specific Status badges
-                                        if (s.absentToday || s.feeDefaulter || s.attendancePercentage < 75) ...[
-                                          const SizedBox(height: 8),
-                                          Wrap(
-                                            spacing: 4,
-                                            runSpacing: 4,
-                                            children: [
-                                              if (s.absentToday)
-                                                _buildStatusBadge('Absent Today', Colors.red.shade50, Colors.red.shade600),
-                                              if (s.feeDefaulter)
-                                                _buildStatusBadge('Fee Due', AppColors.secondary.withOpacity(0.1), AppColors.secondary),
-                                              if (s.attendancePercentage < 75)
-                                                _buildStatusBadge('Attn: ${s.attendancePercentage.toInt()}%', Colors.red.shade50, Colors.red.shade600),
-                                            ],
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(Icons.person, color: Colors.grey, size: 20),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        ),
-                      );
-                    },
-                  )
-                : Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.person_outline, size: 48, color: Colors.grey),
-                        const SizedBox(height: 12),
-                        Text(
-                          appState.translate('studentNotFound'),
-                          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
                   ),
           ),
         ],
@@ -501,10 +530,12 @@ class StudentProfileScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              'Roll No: ${s.rollNo} • ${s.studentClass}',
-                              style: const TextStyle(fontSize: 13, color: Colors.grey),
-                            ),
+                             Text(
+                               (s.rollNo.isNotEmpty && s.rollNo != '1')
+                                   ? 'Roll No: ${s.rollNo} • ${s.studentClass}'
+                                   : s.studentClass,
+                               style: const TextStyle(fontSize: 13, color: Colors.grey),
+                             ),
                           ],
                         ),
                       ),
