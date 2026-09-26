@@ -4,13 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiService {
-  // Base URL for API: 10.0.2.2 is Android Emulator localhost, localhost for web/desktop/iOS
+  // Base URL for Azure Web App API
   static String get baseUrl {
-    if (kIsWeb) {
-      return 'http://localhost:3000/v1';
-    }
-    // Android emulator access to host machine
-    return 'http://10.0.2.2:3000/v1';
+    return 'https://veyho-gdbth8e2d4angha9.centralindia-01.azurewebsites.net/v1';
   }
 
   static const _storage = FlutterSecureStorage();
