@@ -195,6 +195,38 @@ class ClassUpdate {
     this.attachments,
     required this.date,
   });
+
+  factory ClassUpdate.fromJson(Map<String, dynamic> json) {
+    return ClassUpdate(
+      id: json['id'] as String? ?? '',
+      type: json['type'] as String? ?? 'Classwork',
+      title: json['title'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      subject: json['subject'] as String? ?? '',
+      classTarget: json['classTarget'] as String? ?? '',
+      teacherId: json['teacherId'] as String? ?? '',
+      teacherName: json['teacherName'] as String? ?? '',
+      dueDate: json['dueDate'] as String?,
+      attachments: (json['attachments'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      date: json['date'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'type': type,
+      'title': title,
+      'description': description,
+      'subject': subject,
+      'classTarget': classTarget,
+      'teacherId': teacherId,
+      'teacherName': teacherName,
+      'dueDate': dueDate,
+      'attachments': attachments,
+      'date': date,
+    };
+  }
 }
 
 class AttendanceRecord {
@@ -367,5 +399,103 @@ class SchoolConfig {
     required this.nameMarathi,
     required this.nameHindi,
   });
+}
+
+class TeacherDayAttendance {
+  final String date;
+  final String dayOfWeek;
+  final bool isWorkingDay;
+  final bool isHoliday;
+  final String? holidayName;
+  final String? status; // 'present' | 'absent' | 'half_day' | 'leave' | null
+  final String? reason;
+  final String? notes;
+  final String? markedAt;
+  final String? markedBy;
+
+  TeacherDayAttendance({
+    required this.date,
+    required this.dayOfWeek,
+    required this.isWorkingDay,
+    required this.isHoliday,
+    this.holidayName,
+    this.status,
+    this.reason,
+    this.notes,
+    this.markedAt,
+    this.markedBy,
+  });
+
+  factory TeacherDayAttendance.fromJson(Map<String, dynamic> json) {
+    return TeacherDayAttendance(
+      date: json['date'] as String? ?? '',
+      dayOfWeek: json['dayOfWeek'] as String? ?? '',
+      isWorkingDay: json['isWorkingDay'] as bool? ?? true,
+      isHoliday: json['isHoliday'] as bool? ?? false,
+      holidayName: json['holidayName'] as String?,
+      status: json['status'] as String?,
+      reason: json['reason'] as String?,
+      notes: json['notes'] as String?,
+      markedAt: json['markedAt'] as String?,
+      markedBy: json['markedBy'] as String?,
+    );
+  }
+}
+
+class TeacherAttendanceSummary {
+  final int daysPresent;
+  final int daysAbsent;
+  final int daysHalfDay;
+  final int daysLeave;
+  final int daysNotMarked;
+  final double? attendancePercent;
+
+  TeacherAttendanceSummary({
+    required this.daysPresent,
+    required this.daysAbsent,
+    required this.daysHalfDay,
+    required this.daysLeave,
+    required this.daysNotMarked,
+    this.attendancePercent,
+  });
+
+  factory TeacherAttendanceSummary.fromJson(Map<String, dynamic> json) {
+    return TeacherAttendanceSummary(
+      daysPresent: (json['daysPresent'] as num?)?.toInt() ?? 0,
+      daysAbsent: (json['daysAbsent'] as num?)?.toInt() ?? 0,
+      daysHalfDay: (json['daysHalfDay'] as num?)?.toInt() ?? 0,
+      daysLeave: (json['daysLeave'] as num?)?.toInt() ?? 0,
+      daysNotMarked: (json['daysNotMarked'] as num?)?.toInt() ?? 0,
+      attendancePercent: (json['attendancePercent'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class TeacherMonthlyAttendance {
+  final String month;
+  final String monthLabel;
+  final int instructionalDays;
+  final TeacherAttendanceSummary summary;
+  final List<TeacherDayAttendance> days;
+
+  TeacherMonthlyAttendance({
+    required this.month,
+    required this.monthLabel,
+    required this.instructionalDays,
+    required this.summary,
+    required this.days,
+  });
+
+  factory TeacherMonthlyAttendance.fromJson(Map<String, dynamic> json) {
+    return TeacherMonthlyAttendance(
+      month: json['month'] as String? ?? '',
+      monthLabel: json['monthLabel'] as String? ?? '',
+      instructionalDays: (json['instructionalDays'] as num?)?.toInt() ?? 0,
+      summary: TeacherAttendanceSummary.fromJson((json['summary'] as Map<String, dynamic>?) ?? {}),
+      days: ((json['days'] as List<dynamic>?) ?? [])
+          .map((d) => TeacherDayAttendance.fromJson(d as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }
 

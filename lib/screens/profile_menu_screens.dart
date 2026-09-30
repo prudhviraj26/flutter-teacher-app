@@ -237,6 +237,40 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                             ),
                           ),
+                          if (teacher != null && teacher.subjects.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            const Text('Assigned Subjects', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                            const SizedBox(height: 6),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF5F7FA),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(
+                                teacher.subjects.join(', '),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1F2937)),
+                              ),
+                            ),
+                          ],
+                          if (teacher != null && (teacher.assignedClass != null || (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty))) ...[
+                            const SizedBox(height: 16),
+                            const Text('Assigned Class / Sections', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                            const SizedBox(height: 6),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF5F7FA),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(
+                                teacher.assignedClass ?? teacher.assignedClasses!.join(', '),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1F2937)),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

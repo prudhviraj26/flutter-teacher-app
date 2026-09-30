@@ -106,11 +106,35 @@ class StaffNoticeScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 
                 // List of notices
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: notices.length,
-                  itemBuilder: (context, index) {
+                if (notices.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    alignment: Alignment.center,
+                    child: Column(
+                      children: [
+                        Icon(Icons.mark_email_read_outlined, size: 48, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(
+                          appState.language == 'mr'
+                              ? 'सध्या कोणतीही कर्मचारी सूचना नाही'
+                              : appState.language == 'hi'
+                                  ? 'वर्तमान में कोई स्टाफ नोटिस नहीं है'
+                                  : 'No staff circulars posted yet',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: notices.length,
+                    itemBuilder: (context, index) {
                     final notice = notices[index];
                     final isTeal = index % 2 == 0;
                     final iconBg = isTeal ? AppColors.primary.withOpacity(0.1) : AppColors.secondary.withOpacity(0.1);

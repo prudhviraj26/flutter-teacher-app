@@ -96,6 +96,52 @@ class TeacherDataService {
     return [];
   }
 
+  // Fetch Staff Subject Assignments
+  static Future<List<String>> fetchSubjectAssignments(String staffId) async {
+    try {
+      final response = await ApiService.get('/staff/$staffId/subject-assignments');
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+
+      if (list != null) {
+        final List<String> subjects = [];
+        for (var item in list) {
+          if (item is Map<String, dynamic> && item['subject'] != null) {
+            final subj = item['subject'].toString().trim();
+            if (subj.isNotEmpty && !subjects.contains(subj)) {
+              subjects.add(subj);
+            }
+          }
+        }
+        return subjects;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchSubjectAssignments error: $e');
+    }
+    return [];
+  }
+
+  // Fetch Teacher's Own Monthly Attendance & Calendar
+  static Future<TeacherMonthlyAttendance?> fetchMyMonthlyAttendance(String month) async {
+    try {
+      final response = await ApiService.get('/staff-attendance/my-attendance?month=$month');
+      if (response is Map<String, dynamic>) {
+        return TeacherMonthlyAttendance.fromJson(response);
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchMyMonthlyAttendance error: $e');
+    }
+    return null;
+  }
+
   // Mapper helper: API Student JSON -> App Student model
   static Student _mapApiStudentToModel(Map<String, dynamic> json) {
     final String id = json['id']?.toString() ?? 'S-UNK';
@@ -158,15 +204,44 @@ class TeacherDataService {
     final String message = json['body'] ?? json['message'] ?? '';
     final String author = json['senderName'] ?? json['author'] ?? 'School Administration';
 
+    final String targetType = json['targetType']?.toString() ?? 'school';
+    String scope = 'School';
+    if (targetType == 'staff_only') {
+      scope = 'Staff';
+    } else if (targetType == 'class' || targetType == 'section') {
+      scope = 'Class';
+    }
+
+    String date = '2026-05-10';
+    String time = '09:00 AM';
+    if (json['createdAt'] != null) {
+      try {
+        final dt = DateTime.parse(json['createdAt'].toString()).toLocal();
+        date = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+        final h = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
+        final m = dt.minute.toString().padLeft(2, '0');
+        final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+        time = '$h:$m $ampm';
+      } catch (_) {
+        date = json['createdAt']?.toString().split('T')[0] ?? '2026-05-10';
+      }
+    }
+
+    final String? classScope = json['targetClassName'] ??
+        json['targetClass'] ??
+        json['targetSectionName'] ??
+        (targetType == 'class' || targetType == 'section' ? 'Class Notice' : null);
+
     return Announcement(
       id: id,
       title: title,
       message: message,
       author: author,
-      authorId: json['senderId'] ?? 'ADMIN',
-      date: json['createdAt']?.toString().split('T')[0] ?? '2026-05-10',
-      time: '09:00 AM',
-      scope: 'School',
+      authorId: json['composedByStaffId'] ?? json['senderId'] ?? 'ADMIN',
+      classScope: classScope,
+      date: date,
+      time: time,
+      scope: scope,
     );
   }
 }

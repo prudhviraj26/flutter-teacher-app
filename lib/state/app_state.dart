@@ -36,6 +36,10 @@ class AppState extends ChangeNotifier {
   bool _isAttendanceSubmittedToday = false;
   bool _isSubmittingAttendance = false;
 
+  // Teacher Own Monthly Attendance & Calendar
+  TeacherMonthlyAttendance? _monthlyAttendance;
+  bool _isLoadingMonthlyAttendance = false;
+
   // Getters
   String get language => _language;
   bool get loggedIn => _loggedIn;
@@ -45,6 +49,8 @@ class AppState extends ChangeNotifier {
   bool get isLoadingStudents => _isLoadingStudents;
   bool get isAttendanceSubmittedToday => _isAttendanceSubmittedToday;
   bool get isSubmittingAttendance => _isSubmittingAttendance;
+  TeacherMonthlyAttendance? get monthlyAttendance => _monthlyAttendance;
+  bool get isLoadingMonthlyAttendance => _isLoadingMonthlyAttendance;
 
   final SchoolConfig schoolConfig = SchoolConfig(
     name: 'Demo International School',
@@ -126,9 +132,28 @@ class AppState extends ChangeNotifier {
           final String role = userMap['role'] ?? 'class_teacher';
 
           final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
-          final String apiAssignedClass = userMap['assignedClass'] as String? ?? 'Class Teacher';
+          final String? apiAssignedClass = userMap['assignedClass'] as String?;
           final String? apiSectionId = userMap['sectionId'] as String?;
           final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+
+          List<String> parsedSubjects = [];
+          if (userMap['subjects'] != null && userMap['subjects'] is List) {
+            parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+          }
+          if (parsedSubjects.isEmpty) {
+            parsedSubjects = ['General'];
+          }
+
+          List<String>? parsedAssignedClasses;
+          if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
+            parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+          }
+
+          final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
+              ? 'Class Teacher'
+              : 'Subject Teacher';
+
+          final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
 
           _teacher = Teacher(
             id: userMap['id'] ?? 'T001',
@@ -136,11 +161,12 @@ class AppState extends ChangeNotifier {
             employeeId: apiEmployeeId,
             mobile: userMap['mobile'] ?? (_teacher?.mobile ?? ''),
             email: userMap['email'] ?? '',
-            designation: role == 'class_teacher' ? 'Class Teacher' : 'Subject Teacher',
+            designation: designation,
             assignedClass: apiAssignedClass,
             sectionId: apiSectionId,
-            subjects: userMap['subjects'] != null ? List<String>.from(userMap['subjects']) : ['General'],
-            joiningDate: userMap['joiningDate'] ?? '01-06-2022',
+            assignedClasses: parsedAssignedClasses,
+            subjects: parsedSubjects,
+            joiningDate: joiningDate,
             schoolName: apiSchoolName,
           );
         }
@@ -156,14 +182,81 @@ class AppState extends ChangeNotifier {
       }
       _students = liveStudents;
 
+      // Fetch live subject assignments if current subjects are empty or default to General
+      if (_teacher != null && (_teacher!.subjects.isEmpty || _teacher!.subjects.contains('General'))) {
+        try {
+          final liveSubjects = await TeacherDataService.fetchSubjectAssignments(_teacher!.id);
+          if (liveSubjects.isNotEmpty) {
+            _teacher = Teacher(
+              id: _teacher!.id,
+              name: _teacher!.name,
+              employeeId: _teacher!.employeeId,
+              mobile: _teacher!.mobile,
+              email: _teacher!.email,
+              designation: _teacher!.designation,
+              assignedClass: _teacher!.assignedClass,
+              sectionId: _teacher!.sectionId,
+              assignedClasses: _teacher!.assignedClasses,
+              subjects: liveSubjects,
+              joiningDate: _teacher!.joiningDate,
+              schoolName: _teacher!.schoolName,
+            );
+          }
+        } catch (e) {
+          debugPrint("Error fetching live subject assignments: $e");
+        }
+      }
+
+      // Persist updated teacher data into preferences
+      if (_teacher != null) {
+        final userData = {
+          'loggedIn': true,
+          'teacher': _teacher!.toJson(),
+        };
+        await _prefs?.setString('veyho_teacher_user', json.encode(userData));
+      }
+
       final liveAnnouncements = await TeacherDataService.fetchBroadcasts();
-      _announcements = liveAnnouncements;
+
+      // 1. Staff Notices: Strictly broadcasts with scope == 'Staff' (staff_only)
+      final staffList = liveAnnouncements.where((a) => a.scope == 'Staff').toList();
+      _staffNotices = staffList.map((a) => StaffNotice(
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        author: a.author,
+        date: a.date,
+        time: a.time,
+        category: 'Meeting',
+      )).toList();
+
+      // 2. School Notices: Strictly official school-wide broadcasts (school)
+      final schoolList = liveAnnouncements.where((a) => a.scope == 'School').toList();
+      _notices = schoolList.map((a) => Notice(
+        id: a.id,
+        source: a.author,
+        title: a.title,
+        body: a.message,
+        date: a.date,
+        time: a.time,
+      )).toList();
+
+      // 3. Announcements: Class updates, section bulletins, or announcements composed by the teacher
+      final classList = liveAnnouncements.where((a) =>
+        a.scope == 'Class' || a.scope == 'Direct' || a.authorId == _teacher?.id
+      ).toList();
+      _announcements = classList.isNotEmpty ? classList : schoolList;
 
       // Clear mock lists from demo school for authenticated API session
       _parentConversations = [];
-      _classUpdates = [];
+      await _loadClassUpdates();
 
       initTempAttendance();
+
+      // Fetch teacher's monthly attendance for the current month
+      final now = DateTime.now();
+      final curMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+      fetchMonthlyAttendance(curMonth);
     } catch (e) {
       debugPrint("Error loading live data from backend: $e");
     } finally {
@@ -222,9 +315,28 @@ class AppState extends ChangeNotifier {
         final String role = userMap['role'] ?? 'class_teacher';
 
         final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
-        final String apiAssignedClass = userMap['assignedClass'] as String? ?? 'Class Teacher';
+        final String? apiAssignedClass = userMap['assignedClass'] as String?;
         final String? apiSectionId = userMap['sectionId'] as String?;
         final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+
+        List<String> parsedSubjects = [];
+        if (userMap['subjects'] != null && userMap['subjects'] is List) {
+          parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+        }
+        if (parsedSubjects.isEmpty) {
+          parsedSubjects = ['General'];
+        }
+
+        List<String>? parsedAssignedClasses;
+        if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
+          parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+        }
+
+        final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
+            ? 'Class Teacher'
+            : 'Subject Teacher';
+
+        final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
 
         final loadedTeacher = Teacher(
           id: userMap['id'] ?? 'T001',
@@ -232,11 +344,12 @@ class AppState extends ChangeNotifier {
           employeeId: apiEmployeeId,
           mobile: userMap['mobile'] ?? mobile,
           email: userMap['email'] ?? '',
-          designation: role == 'class_teacher' ? 'Class Teacher' : 'Subject Teacher',
+          designation: designation,
           assignedClass: apiAssignedClass,
           sectionId: apiSectionId,
-          subjects: userMap['subjects'] != null ? List<String>.from(userMap['subjects']) : ['General'],
-          joiningDate: userMap['joiningDate'] ?? '01-06-2022',
+          assignedClasses: parsedAssignedClasses,
+          subjects: parsedSubjects,
+          joiningDate: joiningDate,
           schoolName: apiSchoolName,
         );
 
@@ -333,16 +446,148 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Class Updates Storage Helpers
+  Future<void> _loadClassUpdates() async {
+    final teacherId = _teacher?.id ?? 'default';
+    final stored = _prefs?.getString('veyho_teacher_class_updates_$teacherId');
+    if (stored != null && stored.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(stored);
+        _classUpdates = list.map((item) => ClassUpdate.fromJson(item as Map<String, dynamic>)).toList();
+        return;
+      } catch (e) {
+        debugPrint("Error loading class updates from storage: $e");
+      }
+    }
+  }
+
+  Future<void> _saveClassUpdates() async {
+    final teacherId = _teacher?.id ?? 'default';
+    try {
+      final jsonList = _classUpdates.map((u) => u.toJson()).toList();
+      await _prefs?.setString('veyho_teacher_class_updates_$teacherId', json.encode(jsonList));
+    } catch (e) {
+      debugPrint("Error saving class updates to storage: $e");
+    }
+  }
+
   // Add Class Update
   void addClassUpdate(ClassUpdate update) {
     _classUpdates.insert(0, update);
+    _saveClassUpdates();
     notifyListeners();
   }
 
   // Delete Class Update
   void deleteClassUpdate(String id) {
     _classUpdates.removeWhere((element) => element.id == id);
+    _saveClassUpdates();
     notifyListeners();
+  }
+
+  // Teacher Own Monthly Attendance & Duty Diary Operations
+  Future<void> fetchMonthlyAttendance(String month) async {
+    _isLoadingMonthlyAttendance = true;
+    notifyListeners();
+
+    try {
+      if (_loggedIn) {
+        final result = await TeacherDataService.fetchMyMonthlyAttendance(month);
+        if (result != null) {
+          _monthlyAttendance = result;
+          _isLoadingMonthlyAttendance = false;
+          notifyListeners();
+          return;
+        }
+      }
+
+      // Fallback mock generator for offline/demo mode
+      _monthlyAttendance = _generateMockMonthlyAttendance(month);
+    } catch (e) {
+      debugPrint("Error in fetchMonthlyAttendance: $e");
+      _monthlyAttendance = _generateMockMonthlyAttendance(month);
+    } finally {
+      _isLoadingMonthlyAttendance = false;
+      notifyListeners();
+    }
+  }
+
+  TeacherMonthlyAttendance _generateMockMonthlyAttendance(String month) {
+    final parts = month.split('-');
+    final year = int.tryParse(parts[0]) ?? DateTime.now().year;
+    final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? DateTime.now().month) : DateTime.now().month;
+    final totalDays = DateUtils.getDaysInMonth(year, m);
+
+    final List<TeacherDayAttendance> days = [];
+    int present = 0, absent = 0, halfDay = 0, leave = 0, notMarked = 0, instructional = 0;
+
+    for (int d = 1; d <= totalDays; d++) {
+      final dt = DateTime(year, m, d);
+      final isSunday = (dt.weekday == DateTime.sunday);
+      final isWorking = !isSunday;
+      final dateStr = "$year-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}";
+      final dayOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][dt.weekday - 1];
+
+      bool isHoliday = false;
+      String? holidayName;
+      String? status;
+
+      if (d == 1 && m == 5) {
+        isHoliday = true;
+        holidayName = 'Maharashtra Day';
+      } else if (d == 15 && m == 8) {
+        isHoliday = true;
+        holidayName = 'Independence Day';
+      } else if (d == 2 && m == 10) {
+        isHoliday = true;
+        holidayName = 'Gandhi Jayanti';
+      } else if (isWorking) {
+        instructional++;
+        if (d <= DateTime.now().day && dt.isBefore(DateTime.now())) {
+          if (d == 7) {
+            status = 'absent';
+            absent++;
+          } else if (d == 9) {
+            status = 'leave';
+            leave++;
+          } else {
+            status = 'present';
+            present++;
+          }
+        } else {
+          notMarked++;
+        }
+      }
+
+      days.add(TeacherDayAttendance(
+        date: dateStr,
+        dayOfWeek: dayOfWeek,
+        isWorkingDay: isWorking,
+        isHoliday: isHoliday,
+        holidayName: holidayName,
+        status: status,
+      ));
+    }
+
+    final double? pct = instructional > 0 ? ((present + 0.5 * halfDay) / instructional) * 100 : null;
+
+    final monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    final monthLabel = "${monthNames[m - 1]} $year";
+
+    return TeacherMonthlyAttendance(
+      month: month,
+      monthLabel: monthLabel,
+      instructionalDays: instructional,
+      summary: TeacherAttendanceSummary(
+        daysPresent: present,
+        daysAbsent: absent,
+        daysHalfDay: halfDay,
+        daysLeave: leave,
+        daysNotMarked: notMarked,
+        attendancePercent: pct != null ? (pct * 10).round() / 10 : null,
+      ),
+      days: days,
+    );
   }
 
   // Active Attendance operations
@@ -384,7 +629,7 @@ class AppState extends ChangeNotifier {
               final statusStr = currentRecord?['status'] as String?;
 
               if (studentId != null) {
-                final isAbsent = statusStr == 'absent';
+                final isAbsent = statusStr?.toLowerCase() == 'absent';
                 final status = isAbsent ? 'A' : 'P';
                 fetchedTemp[studentId] = status;
 

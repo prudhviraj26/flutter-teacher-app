@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
+import '../models/models.dart';
 
 class DutyDiaryScreen extends StatefulWidget {
   const DutyDiaryScreen({super.key});
@@ -11,60 +12,219 @@ class DutyDiaryScreen extends StatefulWidget {
 }
 
 class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
-  String _currentMonth = 'May 2025';
+  late DateTime _selectedDate;
 
-  void _showNavigationToast(String month) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Navigating to $month (Demo mode)'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
-    setState(() {
-      _currentMonth = month;
+  final List<String> _monthNames = const [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime.now();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadDataForSelectedMonth();
     });
+  }
+
+  String get _monthKey =>
+      "${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}";
+
+  String get _monthLabel =>
+      "${_monthNames[_selectedDate.month - 1]} ${_selectedDate.year}";
+
+  void _loadDataForSelectedMonth() {
+    final appState = Provider.of<AppState>(context, listen: false);
+    appState.fetchMonthlyAttendance(_monthKey);
+  }
+
+  void _goToPreviousMonth() {
+    setState(() {
+      _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1, 1);
+    });
+    _loadDataForSelectedMonth();
+  }
+
+  void _goToNextMonth() {
+    setState(() {
+      _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1, 1);
+    });
+    _loadDataForSelectedMonth();
+  }
+
+  void _showDayDetailsModal(BuildContext context, TeacherDayAttendance day, String formattedDate) {
+    String statusTitle = 'Not Marked';
+    Color statusColor = Colors.grey;
+    IconData statusIcon = Icons.help_outline;
+
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final isFuture = day.date.compareTo(todayStr) > 0;
+
+    if (day.isHoliday) {
+      statusTitle = day.holidayName ?? 'School Holiday';
+      statusColor = const Color(0xFF026AA2);
+      statusIcon = Icons.beach_access_rounded;
+    } else if (!day.isWorkingDay) {
+      statusTitle = 'Weekly Off / Non-Working Day';
+      statusColor = const Color(0xFF667085);
+      statusIcon = Icons.weekend_rounded;
+    } else if (day.status == 'present') {
+      statusTitle = 'Present';
+      statusColor = const Color(0xFF00796B);
+      statusIcon = Icons.check_circle_rounded;
+    } else if (day.status == 'half_day') {
+      statusTitle = 'Half Day';
+      statusColor = const Color(0xFFEA580C);
+      statusIcon = Icons.schedule_rounded;
+    } else if (day.status == 'leave') {
+      statusTitle = 'Leave';
+      statusColor = const Color(0xFFFFA41B);
+      statusIcon = Icons.event_busy_rounded;
+    } else if (day.status == 'absent') {
+      statusTitle = 'Absent';
+      statusColor = const Color(0xFFC62828);
+      statusIcon = Icons.cancel_rounded;
+    } else if (isFuture) {
+      statusTitle = 'Upcoming Working Day';
+      statusColor = const Color(0xFF98A2B3);
+      statusIcon = Icons.calendar_today_rounded;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(statusIcon, color: statusColor, size: 24),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          formattedDate,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          statusTitle,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Divider(height: 1, color: Color(0xFFF3F4F6)),
+              const SizedBox(height: 16),
+              if (day.markedBy != null && day.markedBy!.isNotEmpty) ...[
+                _buildModalInfoRow('Marked By', day.markedBy!),
+                const SizedBox(height: 10),
+              ],
+              if (day.markedAt != null && day.markedAt!.isNotEmpty) ...[
+                _buildModalInfoRow('Marked At', day.markedAt!),
+                const SizedBox(height: 10),
+              ],
+              if (day.reason != null && day.reason!.isNotEmpty) ...[
+                _buildModalInfoRow('Reason', day.reason!),
+                const SizedBox(height: 10),
+              ],
+              if (day.notes != null && day.notes!.isNotEmpty) ...[
+                _buildModalInfoRow('Notes', day.notes!),
+                const SizedBox(height: 10),
+              ],
+              if (day.status == 'absent' || day.status == 'leave') ...[
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3E0),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18, color: Color(0xFFE65100)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'If you believe this record is inaccurate, please contact the School Admin for correction.',
+                          style: TextStyle(fontSize: 11, color: Color(0xFFE65100)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildModalInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
+        Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1F2937))),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
+    final monthlyReport = appState.monthlyAttendance;
+    final summary = monthlyReport?.summary;
 
-    // May 2025 Days generation
-    final List<Map<String, dynamic>> days = [];
-    for (int d = 1; d <= 31; d++) {
-      final int dayOfWeek = (d + 2) % 7; // May 1st is Thursday (3 blank spots before it if Monday = 0)
-      
-      String status = 'present';
-      String? holidayName;
-      bool isToday = false;
+    final int presentCount = summary?.daysPresent ?? 0;
+    final int absentCount = summary?.daysAbsent ?? 0;
+    final int leaveCount = (summary?.daysLeave ?? 0) + (summary?.daysHalfDay ?? 0);
+    final int holidayCount = monthlyReport?.days.where((d) => d.isHoliday).length ?? 0;
 
-      if (d == 1) {
-        status = 'holiday';
-        holidayName = 'Holiday';
-      } else if (d == 7) {
-        status = 'absent';
-      } else if (d == 9) {
-        status = 'leave';
-      } else if (dayOfWeek == 5 || dayOfWeek == 6) {
-        status = 'weekend';
-      } else if (d == 12) {
-        status = 'present';
-        isToday = true;
-      } else if (d > 12) {
-        status = 'future';
-      }
-
-      days.add({
-        'dayNum': d,
-        'status': status,
-        'holidayName': holidayName,
-        'isToday': isToday,
-      });
-    }
-
-    // empty slots representation for Monday, Tuesday, Wednesday (3 slots)
-    final int emptySlots = 3;
+    final firstDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+    final int startOffset = (firstDayOfMonth.weekday - 1) % 7; // Monday = 0
 
     return Scaffold(
       body: Column(
@@ -75,7 +235,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
             padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
             child: Column(
               children: [
-                // Top Nav
+                // Top Navigation Bar
                 Row(
                   children: [
                     GestureDetector(
@@ -102,44 +262,50 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                
-                // Month Selector Strip
+
+                // Month Selector
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       GestureDetector(
-                        onTap: () => _showNavigationToast('April 2025'),
+                        onTap: _goToPreviousMonth,
                         child: Container(
-                          width: 32,
-                          height: 32,
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withOpacity(0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.chevron_left, color: Colors.white),
                         ),
                       ),
-                      Text(
-                        _currentMonth,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        children: [
+                          const Icon(Icons.calendar_month, color: Colors.white, size: 16),
+                          const SizedBox(width: 8),
+                          Text(
+                            _monthLabel,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                       GestureDetector(
-                        onTap: () => _showNavigationToast('June 2025'),
+                        onTap: _goToNextMonth,
                         child: Container(
-                          width: 32,
-                          height: 32,
+                          width: 34,
+                          height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withOpacity(0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.chevron_right, color: Colors.white),
@@ -151,155 +317,208 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
               ],
             ),
           ),
-          
-          // Stats Row & Scrollable Calendar
+
+          // Body Content
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
-              child: Column(
-                children: [
-                  // 4 Stats Chips
-                  Row(
-                    children: [
-                      _buildStatChip('Present', '18', const Color(0xFFE0F2F1), const Color(0xFF00796B), const Color(0xFFB2DFDB)),
-                      const SizedBox(width: 10),
-                      _buildStatChip('Absent', '1', const Color(0xFFFFEBEE), const Color(0xFFC62828), const Color(0xFFFFCDD2)),
-                      const SizedBox(width: 10),
-                      _buildStatChip('Leave', '1', const Color(0xFFFFF3E0), const Color(0xFFFFA41B), const Color(0xFFFFE0B2)),
-                      const SizedBox(width: 10),
-                      _buildStatChip('Holidays', '2', const Color(0xFFECEFF1), const Color(0xFF455A64), const Color(0xFFCFD8DC)),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Calendar Card
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x0A000000),
-                          blurRadius: 10,
-                          offset: Offset(0, 4),
-                        )
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(20),
+            child: appState.isLoadingMonthlyAttendance
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.secondary),
+                  )
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
                     child: Column(
                       children: [
-                        // Legend Wrap
+                        // 4 Stats Chips
+                        Row(
+                          children: [
+                            _buildStatChip('Present', '$presentCount', const Color(0xFFE0F2F1), const Color(0xFF00796B), const Color(0xFFB2DFDB)),
+                            const SizedBox(width: 8),
+                            _buildStatChip('Absent', '$absentCount', const Color(0xFFFFEBEE), const Color(0xFFC62828), const Color(0xFFFFCDD2)),
+                            const SizedBox(width: 8),
+                            _buildStatChip('Leave', '$leaveCount', const Color(0xFFFFF3E0), const Color(0xFFFFA41B), const Color(0xFFFFE0B2)),
+                            const SizedBox(width: 8),
+                            _buildStatChip('Holidays', '$holidayCount', const Color(0xFFECEFF1), const Color(0xFF455A64), const Color(0xFFCFD8DC)),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Calendar Card
                         Container(
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(12),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x0A000000),
+                                blurRadius: 10,
+                                offset: Offset(0, 4),
+                              )
+                            ],
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          child: Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: 12,
-                            runSpacing: 6,
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
                             children: [
-                              _buildLegendItem(const Color(0xFF00897B), 'Present'),
-                              _buildLegendItem(const Color(0xFFC62828), 'Absent'),
-                              _buildLegendItem(const Color(0xFFFFA41B), 'Leave'),
-                              _buildLegendItem(const Color(0xFF455A64), 'Holiday'),
-                              _buildLegendItem(const Color(0xFFB0BEC5), 'Weekend'),
+                              // Legend Strip
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF9FAFB),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                child: Wrap(
+                                  alignment: WrapAlignment.center,
+                                  spacing: 12,
+                                  runSpacing: 6,
+                                  children: [
+                                    _buildLegendItem(const Color(0xFF00897B), 'Present'),
+                                    _buildLegendItem(const Color(0xFFC62828), 'Absent'),
+                                    _buildLegendItem(const Color(0xFFFFA41B), 'Leave'),
+                                    _buildLegendItem(const Color(0xFF455A64), 'Holiday'),
+                                    _buildLegendItem(const Color(0xFFB0BEC5), 'Weekend'),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Weekday Headers
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
+                                  return Expanded(
+                                    child: Text(
+                                      day,
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                              const SizedBox(height: 10),
+
+                              // Dynamic Calendar Grid
+                              _buildDynamicCalendarGrid(
+                                context,
+                                startOffset,
+                                monthlyReport?.days ?? [],
+                              ),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        
-                        // Calendar Weekdays
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
-                            return Expanded(
-                              child: Text(
-                                day,
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 8),
-                        
-                        // Grid layout (using Table or GridView logic manually mapped to Rows)
-                        _buildCalendarGrid(emptySlots, days),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Info Cards
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
+                        const SizedBox(height: 24),
+
+                        // Summary & Progress Card
                         Container(
-                          width: 40,
-                          height: 40,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE0F2F1),
-                            shape: BoxShape.circle,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Icon(Icons.assignment_turned_in_outlined, color: Color(0xFF00796B)),
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFE0F2F1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.assignment_turned_in_outlined, color: Color(0xFF00796B), size: 22),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Present for $presentCount out of ${monthlyReport?.instructionalDays ?? 0} working days',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1F2937),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      summary?.attendancePercent != null
+                                          ? 'Monthly attendance: ${summary!.attendancePercent}%'
+                                          : 'Instructional days recorded this month',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'You have been present for 18 out of 19 working days this month.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1F2937),
+                        const SizedBox(height: 12),
+
+                        // Contextual Alert or Perfect Attendance Card
+                        if (absentCount > 0 || (summary?.daysLeave ?? 0) > 0) ...[
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF3E0),
+                              border: Border.all(color: const Color(0xFFFFE0B2)),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFA41B), size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    '$absentCount absence(s) and ${summary?.daysLeave ?? 0} leave(s) recorded. Contact School Admin for any discrepancies.',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFE65100),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
+                        ] else ...[
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.verified_outlined, color: Color(0xFF16A34A), size: 20),
+                                SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Full attendance maintained this month with zero unexcused absences.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF15803D),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3E0),
-                      border: Border.all(color: const Color(0xFFFFE0B2)),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.warning_amber_rounded, color: Color(0xFFFFA41B), size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            '1 absence recorded. Contact School Admin for any discrepancies.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE65100),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -350,21 +569,24 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
     );
   }
 
-  Widget _buildCalendarGrid(int emptySlots, List<Map<String, dynamic>> days) {
-    // Flatten lists of widgets representing cells
+  Widget _buildDynamicCalendarGrid(
+    BuildContext context,
+    int emptySlots,
+    List<TeacherDayAttendance> days,
+  ) {
     final List<Widget> cells = [];
-    
-    // Empty boxes
+
+    // Empty offset slots before 1st of month
     for (int i = 0; i < emptySlots; i++) {
       cells.add(const SizedBox(height: 48));
     }
-    
-    // Active cells
+
+    // Day cells
     for (var day in days) {
-      cells.add(_buildCalendarCell(day));
+      cells.add(_buildDynamicCalendarCell(context, day));
     }
-    
-    // Split cells into rows of 7
+
+    // Split into rows of 7
     final List<Widget> rows = [];
     for (int i = 0; i < cells.length; i += 7) {
       final List<Widget> rowCells = [];
@@ -389,65 +611,52 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
     return Column(children: rows);
   }
 
-  Widget _buildCalendarCell(Map<String, dynamic> day) {
-    final int dayNum = day['dayNum'] as int;
-    final String status = day['status'] as String;
-    final String? holidayName = day['holidayName'] as String?;
-    final bool isToday = day['isToday'] as bool;
+  Widget _buildDynamicCalendarCell(BuildContext context, TeacherDayAttendance day) {
+    final int dayNum = int.tryParse(day.date.split('-').last) ?? 1;
+
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final bool isToday = (day.date == todayStr);
+    final bool isFuture = day.date.compareTo(todayStr) > 0;
 
     Color bg = Colors.transparent;
-    Color textColor = Colors.grey.shade300;
+    Color textColor = Colors.grey.shade400;
     Color borderColor = Colors.transparent;
 
-    if (isToday) {
-      borderColor = AppColors.secondary;
-    }
-
-    switch (status) {
-      case 'present':
-        bg = const Color(0xFFE0F2F1);
-        textColor = const Color(0xFF00796B);
-        borderColor = isToday ? AppColors.secondary : const Color(0xFFB2DFDB).withOpacity(0.8);
-        break;
-      case 'absent':
-        bg = const Color(0xFFFFEBEE);
-        textColor = const Color(0xFFC62828);
-        borderColor = isToday ? AppColors.secondary : const Color(0xFFFFCDD2).withOpacity(0.8);
-        break;
-      case 'leave':
-        bg = const Color(0xFFFFF3E0);
-        textColor = const Color(0xFFFFA41B);
-        borderColor = isToday ? AppColors.secondary : const Color(0xFFFFE0B2).withOpacity(0.8);
-        break;
-      case 'holiday':
-        bg = const Color(0xFFECEFF1);
-        textColor = const Color(0xFF455A64);
-        borderColor = isToday ? AppColors.secondary : const Color(0xFFCFD8DC).withOpacity(0.8);
-        break;
-      case 'weekend':
-        bg = const Color(0xFFF8F9FA);
-        textColor = const Color(0xFFB0BEC5);
-        borderColor = Colors.transparent;
-        break;
-      case 'future':
-      default:
-        bg = Colors.transparent;
-        textColor = Colors.grey.shade400;
-        borderColor = const Color(0xFFF3F4F6);
-        break;
+    if (day.isHoliday) {
+      bg = const Color(0xFFF0F9FF);
+      textColor = const Color(0xFF026AA2);
+      borderColor = const Color(0xFFB9E6FE);
+    } else if (!day.isWorkingDay) {
+      bg = const Color(0xFFF8FAFC);
+      textColor = const Color(0xFF98A2B3);
+      borderColor = Colors.transparent;
+    } else if (day.status == 'present') {
+      bg = const Color(0xFFE0F2F1);
+      textColor = const Color(0xFF00796B);
+      borderColor = const Color(0xFFB2DFDB);
+    } else if (day.status == 'absent') {
+      bg = const Color(0xFFFFEBEE);
+      textColor = const Color(0xFFC62828);
+      borderColor = const Color(0xFFFFCDD2);
+    } else if (day.status == 'leave' || day.status == 'half_day') {
+      bg = const Color(0xFFFFF3E0);
+      textColor = const Color(0xFFFFA41B);
+      borderColor = const Color(0xFFFFE0B2);
+    } else if (isFuture) {
+      bg = Colors.transparent;
+      textColor = Colors.grey.shade400;
+      borderColor = const Color(0xFFF3F4F6);
+    } else {
+      // Past day, not marked
+      bg = const Color(0xFFF3F4F6);
+      textColor = const Color(0xFF6B7280);
+      borderColor = const Color(0xFFE5E7EB);
     }
 
     return GestureDetector(
       onTap: () {
-        if (status != 'future' && status != 'weekend') {
-          ScaffoldMessenger.of(context).clearSnackBars();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Day $dayNum: ${status.toUpperCase()} ${holidayName != null ? "($holidayName)" : ""}'),
-              duration: const Duration(seconds: 1),
-            ),
-          );
-        }
+        _showDayDetailsModal(context, day, "${_monthNames[_selectedDate.month - 1]} $dayNum, ${_selectedDate.year}");
       },
       child: Container(
         height: 48,
@@ -456,7 +665,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
           color: bg,
           borderRadius: BorderRadius.circular(12),
           border: isToday
-              ? Border.all(color: borderColor, width: 2)
+              ? Border.all(color: AppColors.secondary, width: 2)
               : borderColor != Colors.transparent
                   ? Border.all(color: borderColor, width: 1)
                   : null,
@@ -472,16 +681,36 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            if (holidayName != null)
+            if (day.isHoliday && day.holidayName != null)
               Text(
-                holidayName,
+                day.holidayName!,
                 style: const TextStyle(
                   fontSize: 7,
-                  color: Color(0xFF455A64),
+                  color: Color(0xFF026AA2),
                   fontWeight: FontWeight.w900,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              )
+            else if (day.status == 'present')
+              const Text(
+                'P',
+                style: TextStyle(fontSize: 7, color: Color(0xFF00796B), fontWeight: FontWeight.w900),
+              )
+            else if (day.status == 'absent')
+              const Text(
+                'A',
+                style: TextStyle(fontSize: 7, color: Color(0xFFC62828), fontWeight: FontWeight.w900),
+              )
+            else if (day.status == 'half_day')
+              const Text(
+                'H',
+                style: TextStyle(fontSize: 7, color: Color(0xFFEA580C), fontWeight: FontWeight.w900),
+              )
+            else if (day.status == 'leave')
+              const Text(
+                'L',
+                style: TextStyle(fontSize: 7, color: Color(0xFFFFA41B), fontWeight: FontWeight.w900),
               ),
           ],
         ),

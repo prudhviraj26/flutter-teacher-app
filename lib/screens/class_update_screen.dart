@@ -75,6 +75,12 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
 
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final dueDateTime = now.add(const Duration(days: 2));
+    final dueDateStr = "${dueDateTime.year}-${dueDateTime.month.toString().padLeft(2, '0')}-${dueDateTime.day.toString().padLeft(2, '0')}";
+
+    final formattedClassTarget = (_classSection.startsWith('Class ') || _classSection.startsWith('Grade '))
+        ? _classSection
+        : 'Class $_classSection';
 
     final newUpdate = ClassUpdate(
       id: "CU${now.millisecondsSinceEpoch}",
@@ -82,10 +88,10 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       title: _type == 'Homework' ? '$_subject Homework' : '$_subject Classwork',
       description: description,
       subject: _subject,
-      classTarget: 'Class $_classSection',
+      classTarget: formattedClassTarget,
       teacherId: appState.teacher?.id ?? "T001",
       teacherName: appState.teacher?.name ?? "Teacher",
-      dueDate: _type == 'Homework' ? "2026-06-15" : null,
+      dueDate: _type == 'Homework' ? dueDateStr : null,
       attachments: _attachedFile != null ? [_attachedFile!] : null,
       date: dateStr,
     );
@@ -119,7 +125,33 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    
+    final teacher = appState.teacher;
+
+    final List<String> availableClasses = [];
+    if (teacher != null) {
+      if (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty) {
+        for (var c in teacher.assignedClasses!) {
+          if (!availableClasses.contains(c)) availableClasses.add(c);
+        }
+      }
+      if (teacher.assignedClass != null && teacher.assignedClass!.isNotEmpty && !availableClasses.contains(teacher.assignedClass)) {
+        availableClasses.add(teacher.assignedClass!);
+      }
+    }
+    if (availableClasses.isEmpty) {
+      availableClasses.addAll(['Grade 3-B', 'Class 7A', 'Class 8A']);
+    }
+
+    final List<String> availableSubjects = [];
+    if (teacher != null && teacher.subjects.isNotEmpty) {
+      for (var s in teacher.subjects) {
+        if (!availableSubjects.contains(s)) availableSubjects.add(s);
+      }
+    }
+    if (availableSubjects.isEmpty) {
+      availableSubjects.addAll(['Mathematics', 'Science', 'English']);
+    }
+
     final filteredUpdates = _filterType == 'All'
         ? appState.classUpdates
         : appState.classUpdates.where((u) => u.type == _filterType).toList();
@@ -174,7 +206,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(_showPostForm ? Icons.close : Icons.plus_one, color: Colors.white),
+                        child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
                       ),
                     ),
                   ],
@@ -331,14 +363,16 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 12),
                                     child: DropdownButtonHideUnderline(
                                       child: DropdownButton<String>(
-                                        value: _classSection.isEmpty ? null : _classSection,
+                                        value: availableClasses.contains(_classSection) ? _classSection : null,
                                         hint: const Text('Select'),
                                         isExpanded: true,
-                                        items: const [
-                                          DropdownMenuItem(value: '7A', child: Text('Class 7A')),
-                                          DropdownMenuItem(value: '7B', child: Text('Class 7B')),
-                                          DropdownMenuItem(value: '8A', child: Text('Class 8A')),
-                                        ],
+                                        items: availableClasses.map((c) => DropdownMenuItem(
+                                          value: c,
+                                          child: Text(
+                                            c.startsWith('Class ') || c.startsWith('Grade ') ? c : 'Class $c',
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        )).toList(),
                                         onChanged: (val) => setState(() => _classSection = val ?? ''),
                                       ),
                                     ),
@@ -361,14 +395,13 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 12),
                                     child: DropdownButtonHideUnderline(
                                       child: DropdownButton<String>(
-                                        value: _subject.isEmpty ? null : _subject,
+                                        value: availableSubjects.contains(_subject) ? _subject : null,
                                         hint: const Text('Select'),
                                         isExpanded: true,
-                                        items: const [
-                                          DropdownMenuItem(value: 'Mathematics', child: Text('Mathematics')),
-                                          DropdownMenuItem(value: 'Science', child: Text('Science')),
-                                          DropdownMenuItem(value: 'English', child: Text('English')),
-                                        ],
+                                        items: availableSubjects.map((s) => DropdownMenuItem(
+                                          value: s,
+                                          child: Text(s, overflow: TextOverflow.ellipsis),
+                                        )).toList(),
                                         onChanged: (val) => setState(() => _subject = val ?? ''),
                                       ),
                                     ),
@@ -481,11 +514,82 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                   const SizedBox(height: 16),
                 ],
                 
-                // List Updates
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: filteredUpdates.length,
+                // List Updates or Empty State
+                if (filteredUpdates.isEmpty && !_showPostForm) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x0A000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    alignment: Alignment.center,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.assignment_outlined, size: 32, color: AppColors.primary),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          _filterType == 'All'
+                              ? 'No Class Updates Yet'
+                              : 'No $_filterType Updates',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _filterType == 'All'
+                              ? 'Share homework assignments, classwork, and study materials with your classes.'
+                              : 'No $_filterType entries recorded yet.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _showPostForm = true;
+                            });
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Post Class Update', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredUpdates.length,
                   itemBuilder: (context, index) {
                     final item = filteredUpdates[index];
                     final isHomework = item.type == 'Homework';
@@ -608,6 +712,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     );
                   },
                 ),
+                ],
               ],
             ),
           ),

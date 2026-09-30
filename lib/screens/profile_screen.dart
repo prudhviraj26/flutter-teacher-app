@@ -200,7 +200,9 @@ class ProfileScreen extends StatelessWidget {
                       _buildInfoRow(appState.translate('email'), teacher.email),
                       if (teacher.assignedClass != null)
                         _buildInfoRow(appState.translate('assignedClass'), teacher.assignedClass!),
-                      if (teacher.assignedClasses != null)
+                      if (teacher.assignedClasses != null &&
+                          teacher.assignedClasses!.isNotEmpty &&
+                          (teacher.assignedClass == null || !teacher.assignedClasses!.contains(teacher.assignedClass)))
                         _buildInfoRow(appState.translate('assignedClasses'), teacher.assignedClasses!.join(', ')),
                       _buildInfoRow(appState.translate('subjects'), teacher.subjects.join(', ')),
                     ],
