@@ -266,6 +266,16 @@ class AppState extends ChangeNotifier {
 
       initTempAttendance();
 
+      // Fetch school holidays from web admin portal
+      try {
+        final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
+        if (liveHolidays.isNotEmpty) {
+          _holidays = liveHolidays;
+        }
+      } catch (hErr) {
+        debugPrint("Error fetching live holidays: $hErr");
+      }
+
       // Fetch teacher's monthly attendance for the current month
       final now = DateTime.now();
       final curMonth = "${now.year}-${now.month.toString().padLeft(2, '0')}";
@@ -1024,23 +1034,54 @@ class AppState extends ChangeNotifier {
       ),
     ];
 
-    // 11. Holidays
+    // 11. Holidays (Comprehensive list matching Admin Portal 2026-27 schedule)
     _holidays = [
-      Holiday(id: '1', date: '26', month: 'Jan', day: 'Monday', title: 'Republic Day', type: 'National'),
-      Holiday(id: '2', date: '14', month: 'Mar', day: 'Friday', title: 'Holi', type: 'Festival'),
-      Holiday(id: '3', date: '29', month: 'Mar', day: 'Saturday', title: 'Good Friday', type: 'National'),
-      Holiday(id: '4', date: '14', month: 'Apr', day: 'Monday', title: 'Dr. Ambedkar Jayanti', type: 'National'),
-      Holiday(id: '5', date: '01', month: 'May', day: 'Thursday', title: 'Maharashtra Day', type: 'National'),
-      Holiday(id: '6', date: '23', month: 'May', day: 'Friday', title: 'Buddha Purnima', type: 'Festival'),
-      Holiday(id: '7', date: '15', month: 'Aug', day: 'Friday', title: 'Independence Day', type: 'National'),
-      Holiday(id: '8', date: '16', month: 'Aug', day: 'Saturday', title: 'Janmashtami', type: 'Festival'),
-      Holiday(id: '9', date: '02', month: 'Oct', day: 'Thursday', title: 'Gandhi Jayanti', type: 'National'),
-      Holiday(id: '10', date: '24', month: 'Oct', day: 'Friday', title: 'Dussehra', type: 'Festival'),
-      Holiday(id: '11', date: '13', month: 'Nov', day: 'Thursday', title: 'Diwali', type: 'Festival'),
-      Holiday(id: '12', date: '25', month: 'Dec', day: 'Thursday', title: 'Christmas', type: 'National'),
+      Holiday(id: '1', date: '14', month: 'Jan', day: 'Wednesday', title: 'Makar Sankranti / Pongal', type: 'Festival', fullDate: '2026-01-14'),
+      Holiday(id: '2', date: '26', month: 'Jan', day: 'Monday', title: 'Republic Day', type: 'National', fullDate: '2026-01-26'),
+      Holiday(id: '3', date: '15', month: 'Feb', day: 'Sunday', title: 'Maha Shivratri', type: 'Festival', fullDate: '2026-02-15'),
+      Holiday(id: '4', date: '03', month: 'Mar', day: 'Tuesday', title: 'Holi', type: 'Festival', fullDate: '2026-03-03'),
+      Holiday(id: '5', date: '21', month: 'Mar', day: 'Saturday', title: 'Id-ul-Fitr (Ramzan Eid)', type: 'Festival', fullDate: '2026-03-21'),
+      Holiday(id: '6', date: '31', month: 'Mar', day: 'Tuesday', title: 'Mahavir Jayanti', type: 'Festival', fullDate: '2026-03-31'),
+      Holiday(id: '7', date: '03', month: 'Apr', day: 'Friday', title: 'Good Friday', type: 'National', fullDate: '2026-04-03'),
+      Holiday(id: '8', date: '14', month: 'Apr', day: 'Tuesday', title: 'Ambedkar Jayanti', type: 'National', fullDate: '2026-04-14'),
+      Holiday(id: '9', date: '01', month: 'May', day: 'Friday', title: 'Labour Day / Maharashtra Day', type: 'National', fullDate: '2026-05-01'),
+      Holiday(id: '10', date: '28', month: 'May', day: 'Thursday', title: 'Bakrid (Eid-ul-Adha)', type: 'Festival', fullDate: '2026-05-28'),
+      Holiday(id: '11', date: '26', month: 'Jun', day: 'Friday', title: 'Muharram', type: 'Festival', fullDate: '2026-06-26'),
+      Holiday(id: '12', date: '15', month: 'Aug', day: 'Saturday', title: 'Independence Day', type: 'National', fullDate: '2026-08-15'),
+      Holiday(id: '13', date: '26', month: 'Aug', day: 'Wednesday', title: 'Milad-un-Nabi (Id-e-Milad)', type: 'Festival', fullDate: '2026-08-26'),
+      Holiday(id: '14', date: '28', month: 'Aug', day: 'Friday', title: 'Raksha Bandhan', type: 'Festival', fullDate: '2026-08-28'),
+      Holiday(id: '15', date: '02', month: 'Oct', day: 'Friday', title: 'Gandhi Jayanti', type: 'National', fullDate: '2026-10-02'),
+      Holiday(id: '16', date: '20', month: 'Oct', day: 'Tuesday', title: 'Dussehra', type: 'Festival', fullDate: '2026-10-20'),
+      Holiday(id: '17', date: '08', month: 'Nov', day: 'Sunday', title: 'Diwali', type: 'Festival', fullDate: '2026-11-08'),
+      Holiday(id: '18', date: '24', month: 'Nov', day: 'Tuesday', title: 'Guru Nanak Jayanti', type: 'Festival', fullDate: '2026-11-24'),
+      Holiday(id: '19', date: '25', month: 'Dec', day: 'Friday', title: 'Christmas', type: 'National', fullDate: '2026-12-25'),
     ];
 
     // 12. Exam results
     _examResults = [];
   }
+
+  // Check if today is a registered holiday or weekend
+  Holiday? getTodayHoliday() {
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final curMonth = months[now.month - 1];
+    final curDay = now.day.toString().padLeft(2, '0');
+    final curDayInt = now.day.toString();
+
+    for (var h in _holidays) {
+      if (h.fullDate != null && h.fullDate == todayStr) {
+        return h;
+      }
+      if (h.month.toLowerCase() == curMonth.toLowerCase() &&
+          (h.date == curDay || h.date == curDayInt)) {
+        return h;
+      }
+    }
+    return null;
+  }
+
+  bool get isTodaySunday => DateTime.now().weekday == DateTime.sunday;
+  bool get isTodayHoliday => getTodayHoliday() != null || isTodaySunday;
 }

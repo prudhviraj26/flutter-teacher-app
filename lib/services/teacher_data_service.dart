@@ -142,6 +142,37 @@ class TeacherDataService {
     return null;
   }
 
+  // Fetch School Holidays from Admin Portal
+  static Future<List<Holiday>> fetchSchoolHolidays({String? academicYearId}) async {
+    try {
+      final String queryParam = (academicYearId != null && academicYearId.isNotEmpty) ? '?academicYearId=$academicYearId' : '';
+      final response = await ApiService.get('/school-holidays$queryParam');
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+
+      if (list != null) {
+        final List<Holiday> holidays = [];
+        for (var item in list) {
+          if (item is Map<String, dynamic>) {
+            holidays.add(Holiday.fromJson(item));
+          }
+        }
+        return holidays;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchSchoolHolidays error: $e');
+    }
+    return [];
+  }
+
   // Mapper helper: API Student JSON -> App Student model
   static Student _mapApiStudentToModel(Map<String, dynamic> json) {
     final String id = json['id']?.toString() ?? 'S-UNK';

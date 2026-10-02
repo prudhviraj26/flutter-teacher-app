@@ -402,6 +402,8 @@ class Holiday {
   final String month;
   final String title;
   final String type; // 'National' | 'Festival' | 'School'
+  final String? fullDate; // 'YYYY-MM-DD'
+  final String? description;
 
   Holiday({
     required this.id,
@@ -410,7 +412,37 @@ class Holiday {
     required this.month,
     required this.title,
     required this.type,
+    this.fullDate,
+    this.description,
   });
+
+  factory Holiday.fromJson(Map<String, dynamic> json) {
+    final rawDate = json['date']?.toString() ?? '';
+    DateTime dt;
+    try {
+      dt = DateTime.parse(rawDate);
+    } catch (_) {
+      dt = DateTime.now();
+    }
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    final dStr = dt.day.toString().padLeft(2, '0');
+    final mStr = months[dt.month - 1];
+    final dayStr = days[dt.weekday - 1];
+    final fullDateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+
+    return Holiday(
+      id: json['id']?.toString() ?? '',
+      date: dStr,
+      day: dayStr,
+      month: mStr,
+      title: json['name'] ?? json['title'] ?? 'School Holiday',
+      type: json['type'] ?? 'National',
+      fullDate: fullDateStr,
+      description: json['description']?.toString(),
+    );
+  }
 }
 
 class ExamResult {
