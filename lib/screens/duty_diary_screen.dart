@@ -219,8 +219,8 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
     final summary = monthlyReport?.summary;
 
     final int presentCount = summary?.daysPresent ?? 0;
-    final int absentCount = summary?.daysAbsent ?? 0;
-    final int leaveCount = (summary?.daysLeave ?? 0) + (summary?.daysHalfDay ?? 0);
+    final int halfDayCount = summary?.daysHalfDay ?? 0;
+    final int leaveCount = (summary?.daysLeave ?? 0) + (summary?.daysAbsent ?? 0);
     final int holidayCount = monthlyReport?.days.where((d) => d.isHoliday).length ?? 0;
 
     final firstDayOfMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
@@ -328,14 +328,14 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
                     child: Column(
                       children: [
-                        // 4 Stats Chips
+                        // 4 Stats Chips: PRESENT (Green), LEAVE (Rose), HALF DAY (Orange), HOLIDAYS (Grey)
                         Row(
                           children: [
                             _buildStatChip('Present', '$presentCount', const Color(0xFFE0F2F1), const Color(0xFF00796B), const Color(0xFFB2DFDB)),
                             const SizedBox(width: 8),
-                            _buildStatChip('Absent', '$absentCount', const Color(0xFFFFEBEE), const Color(0xFFC62828), const Color(0xFFFFCDD2)),
+                            _buildStatChip('Leave', '$leaveCount', const Color(0xFFFFEBEE), const Color(0xFFE11D48), const Color(0xFFFFCDD2)),
                             const SizedBox(width: 8),
-                            _buildStatChip('Leave', '$leaveCount', const Color(0xFFFFF3E0), const Color(0xFFFFA41B), const Color(0xFFFFE0B2)),
+                            _buildStatChip('Half Day', '$halfDayCount', const Color(0xFFFFF3E0), const Color(0xFFEA580C), const Color(0xFFFFE0B2)),
                             const SizedBox(width: 8),
                             _buildStatChip('Holidays', '$holidayCount', const Color(0xFFECEFF1), const Color(0xFF455A64), const Color(0xFFCFD8DC)),
                           ],
@@ -372,8 +372,8 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                                   runSpacing: 6,
                                   children: [
                                     _buildLegendItem(const Color(0xFF00897B), 'Present'),
-                                    _buildLegendItem(const Color(0xFFC62828), 'Absent'),
-                                    _buildLegendItem(const Color(0xFFFFA41B), 'Leave'),
+                                    _buildLegendItem(const Color(0xFFE11D48), 'Leave'),
+                                    _buildLegendItem(const Color(0xFFEA580C), 'Half Day'),
                                     _buildLegendItem(const Color(0xFF455A64), 'Holiday'),
                                     _buildLegendItem(const Color(0xFFB0BEC5), 'Weekend'),
                                   ],
@@ -463,7 +463,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                         const SizedBox(height: 12),
 
                         // Contextual Alert or Perfect Attendance Card
-                        if (absentCount > 0 || (summary?.daysLeave ?? 0) > 0) ...[
+                        if (leaveCount > 0 || halfDayCount > 0) ...[
                           Container(
                             decoration: BoxDecoration(
                               color: const Color(0xFFFFF3E0),
@@ -474,15 +474,15 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFA41B), size: 20),
+                                const Icon(Icons.info_outline, color: Color(0xFFEA580C), size: 20),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    '$absentCount absence(s) and ${summary?.daysLeave ?? 0} leave(s) recorded. Contact School Admin for any discrepancies.',
+                                    '$leaveCount leave(s)${halfDayCount > 0 ? " and $halfDayCount half-day(s)" : ""} recorded. Contact School Admin for any discrepancies.',
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFFE65100),
+                                      color: Color(0xFFC2410C),
                                     ),
                                   ),
                                 ),
@@ -504,7 +504,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    'Full attendance maintained this month with zero unexcused absences.',
+                                    'Full attendance maintained this month with zero leaves recorded.',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
@@ -635,14 +635,14 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
       bg = const Color(0xFFE0F2F1);
       textColor = const Color(0xFF00796B);
       borderColor = const Color(0xFFB2DFDB);
-    } else if (day.status == 'absent') {
-      bg = const Color(0xFFFFEBEE);
-      textColor = const Color(0xFFC62828);
-      borderColor = const Color(0xFFFFCDD2);
-    } else if (day.status == 'leave' || day.status == 'half_day') {
+    } else if (day.status == 'half_day') {
       bg = const Color(0xFFFFF3E0);
-      textColor = const Color(0xFFFFA41B);
+      textColor = const Color(0xFFEA580C);
       borderColor = const Color(0xFFFFE0B2);
+    } else if (day.status == 'leave' || day.status == 'absent') {
+      bg = const Color(0xFFFFEBEE);
+      textColor = const Color(0xFFE11D48);
+      borderColor = const Color(0xFFFFCDD2);
     } else if (isFuture) {
       bg = Colors.transparent;
       textColor = Colors.grey.shade400;
@@ -697,20 +697,15 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                 'P',
                 style: TextStyle(fontSize: 7, color: Color(0xFF00796B), fontWeight: FontWeight.w900),
               )
-            else if (day.status == 'absent')
-              const Text(
-                'A',
-                style: TextStyle(fontSize: 7, color: Color(0xFFC62828), fontWeight: FontWeight.w900),
-              )
             else if (day.status == 'half_day')
               const Text(
                 'H',
                 style: TextStyle(fontSize: 7, color: Color(0xFFEA580C), fontWeight: FontWeight.w900),
               )
-            else if (day.status == 'leave')
+            else if (day.status == 'leave' || day.status == 'absent')
               const Text(
                 'L',
-                style: TextStyle(fontSize: 7, color: Color(0xFFFFA41B), fontWeight: FontWeight.w900),
+                style: TextStyle(fontSize: 7, color: Color(0xFFE11D48), fontWeight: FontWeight.w900),
               ),
           ],
         ),

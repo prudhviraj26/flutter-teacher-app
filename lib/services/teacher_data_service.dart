@@ -157,15 +157,21 @@ class TeacherDataService {
     final String enrollmentNo = json['grNumber'] ?? json['enrollmentNo'] ?? 'GR-${id.substring(0, id.length > 4 ? 4 : id.length)}';
     
     final currentEnrollment = json['currentEnrollment'];
-    final sectionData = json['section'] ?? currentEnrollment;
+    final sectionData = json['section'] ?? currentEnrollment?['section'] ?? currentEnrollment;
     
-    String studentClass = 'Class';
+    String studentClass = '';
     if (sectionData != null) {
-      final className = sectionData['className'] ?? sectionData['classLevel'] ?? '';
+      final className = sectionData['className'] ?? sectionData['class']?['name'] ?? sectionData['classLevel'] ?? '';
       final sectionName = sectionData['sectionName'] ?? sectionData['name'] ?? '';
       if (className.isNotEmpty || sectionName.isNotEmpty) {
         studentClass = "$className $sectionName".trim();
       }
+    }
+    if (studentClass.isEmpty && json['studentClass'] != null) {
+      studentClass = json['studentClass'].toString();
+    }
+    if (studentClass.isEmpty) {
+      studentClass = 'Grade 10 A';
     }
 
     final primaryParent = json['primaryParent'] ??
@@ -177,6 +183,16 @@ class TeacherDataService {
         ? (primaryParent['name'] ?? "${primaryParent['firstName'] ?? ''} ${primaryParent['lastName'] ?? ''}".trim())
         : (json['parentName'] ?? 'Parent');
     final String parentMobile = primaryParent?['mobilePrimary'] ?? primaryParent?['mobile'] ?? json['parentMobile'] ?? '';
+    final String parentEmail = primaryParent?['email'] ?? json['parentEmail'] ?? '';
+
+    final double attnPct = (json['attendancePercentage'] != null)
+        ? (double.tryParse(json['attendancePercentage'].toString()) ?? 92.0)
+        : (json['attendancePercent'] != null
+            ? (double.tryParse(json['attendancePercent'].toString()) ?? 92.0)
+            : 92.0);
+
+    final bool feeDefaulter = json['feeDefaulter'] == true || json['feeDue'] == true || json['hasDue'] == true;
+    final bool absentToday = json['absentToday'] == true || json['status'] == 'absent';
 
     return Student(
       id: id,
@@ -184,16 +200,17 @@ class TeacherDataService {
       rollNo: rollNo,
       enrollmentNo: enrollmentNo,
       studentClass: studentClass,
-      dateOfBirth: json['dob'] ?? (json['dateOfBirth']?.toString().split('T')[0] ?? '01-01-2017'),
+      dateOfBirth: json['dob'] ?? (json['dateOfBirth']?.toString().split('T')[0] ?? '15-08-2015'),
       gender: (json['gender'] as String?)?.toUpperCase() ?? 'Male',
       parentName: parentName.isNotEmpty ? parentName : 'Parent',
       parentMobile: parentMobile,
-      address: json['addressLine1'] ?? json['address'] ?? 'School Address',
-      bloodGroup: json['bloodGroup'] ?? 'O+',
-      emergencyContact: parentMobile,
-      absentToday: json['absentToday'] ?? false,
-      feeDefaulter: json['feeDefaulter'] ?? false,
-      attendancePercentage: (json['attendancePercentage'] as num?)?.toDouble() ?? 95.0,
+      parentEmail: parentEmail,
+      address: json['addressLine1'] ?? json['address'] ?? 'School Campus, Mumbai',
+      bloodGroup: json['bloodGroup'] ?? 'B+',
+      emergencyContact: parentMobile.isNotEmpty ? parentMobile : '+91 98765 00000',
+      absentToday: absentToday,
+      feeDefaulter: feeDefaulter,
+      attendancePercentage: attnPct,
     );
   }
 

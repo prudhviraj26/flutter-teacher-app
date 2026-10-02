@@ -14,6 +14,7 @@ class StudentRosterScreen extends StatefulWidget {
 class _StudentRosterScreenState extends State<StudentRosterScreen> {
   String _searchQuery = '';
   String _activeFilter = 'all'; // 'all' | 'absent' | 'fees' | 'attendance'
+  String _selectedClass = '';
 
   @override
   void initState() {
@@ -30,123 +31,76 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
-    final isSubjectTeacher = teacher?.designation == 'Subject Teacher';
-    final studentsList = appState.students;
+    final allStudents = appState.students;
 
-    if (isSubjectTeacher) {
-      return Scaffold(
-        body: Column(
-          children: [
-            // Header
-            Container(
-              color: AppColors.secondary,
-              padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.arrow_back, color: Colors.white),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    appState.translate('students'),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Warning layout
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.group_outlined,
-                        color: AppColors.primary,
-                        size: 48,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Student records are managed by the Class Teacher',
-                      style: TextStyle(
-                        color: Color(0xFF1F2937),
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Student records are accessible to the Class Teacher. Please contact your Class Teacher or School Admin for student information.',
-                      style: TextStyle(
-                        color: Colors.grey,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            
-            // Bottom button
-            Container(
-              padding: const EdgeInsets.all(24),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.secondary,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Text(
-                    appState.translate('goBackToDashboard'),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
+    // Determine available classes from teacher assignments & student records
+    final List<String> availableClasses = [];
+    if (teacher != null) {
+      if (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty) {
+        for (var c in teacher.assignedClasses!) {
+          if (!availableClasses.contains(c)) availableClasses.add(c);
+        }
+      }
+      if (teacher.assignedClass != null && teacher.assignedClass!.isNotEmpty && !availableClasses.contains(teacher.assignedClass)) {
+        availableClasses.add(teacher.assignedClass!);
+      }
+    }
+    for (var s in allStudents) {
+      if (s.studentClass.isNotEmpty && !availableClasses.contains(s.studentClass)) {
+        availableClasses.add(s.studentClass);
+      }
+    }
+    if (availableClasses.isEmpty) {
+      availableClasses.add('Grade 10 A');
     }
 
-    // Class Teacher Filter calculations
-    final int allCount = studentsList.length;
-    final int absentCount = studentsList.where((s) => s.absentToday).length;
-    final int feesCount = studentsList.where((s) => s.feeDefaulter).length;
-    final int attendanceCount = studentsList.where((s) => s.attendancePercentage < 75).length;
+    // Default selected class if not set or invalid
+    if (_selectedClass.isEmpty || (!availableClasses.contains(_selectedClass) && _selectedClass != 'All Classes')) {
+      _selectedClass = availableClasses.first;
+    }
 
-    final filteredStudents = studentsList.where((student) {
+    String normalizeClassName(String raw) {
+      return raw.toLowerCase()
+          .replaceAll('grade', '')
+          .replaceAll('class', '')
+          .replaceAll('-', '')
+          .replaceAll(' ', '')
+          .trim();
+    }
+
+    // Filter students by selected class
+    List<Student> classStudents = allStudents.where((s) {
+      if (_selectedClass == 'All Classes' || availableClasses.length <= 1) {
+        return true;
+      }
+      final sNorm = normalizeClassName(s.studentClass);
+      final targetNorm = normalizeClassName(_selectedClass);
+      return sNorm.isEmpty || sNorm == targetNorm || s.studentClass == _selectedClass;
+    }).toList();
+
+    if (classStudents.isEmpty && allStudents.isNotEmpty) {
+      classStudents = allStudents;
+    }
+
+    // Sync live today's attendance status from active marking session
+    for (var s in classStudents) {
+      if (appState.tempAttendance.containsKey(s.id)) {
+        s.absentToday = (appState.tempAttendance[s.id] == 'A');
+      }
+    }
+
+    // Dynamic Filter counts
+    final int allCount = classStudents.length;
+    final int absentCount = classStudents.where((s) => s.absentToday).length;
+    final int feesCount = classStudents.where((s) => s.feeDefaulter).length;
+    final int attendanceCount = classStudents.where((s) => s.attendancePercentage < 75).length;
+
+    // Filtered list matching active tab & search query
+    final filteredStudents = classStudents.where((student) {
       final matchesSearch = student.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           student.rollNo.contains(_searchQuery) ||
-          student.enrollmentNo.toLowerCase().contains(_searchQuery.toLowerCase());
+          student.enrollmentNo.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          student.parentName.toLowerCase().contains(_searchQuery.toLowerCase());
       if (!matchesSearch) return false;
 
       if (_activeFilter == 'absent') {
@@ -164,53 +118,87 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     return Scaffold(
       body: Column(
         children: [
-          // Header & Search
+          // Header & Class Switcher
           Container(
             color: AppColors.secondary,
             padding: const EdgeInsets.fromLTRB(24, 48, 24, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Top Nav Row
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(
-                          appState.translate('students'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.arrow_back, color: Colors.white),
                           ),
                         ),
-                        Text(
-                          '$allCount ${appState.translate("totalStudents")}',
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.8),
-                            fontSize: 12,
-                          ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              appState.translate('students'),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '$allCount ${appState.translate("totalStudents")}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.85),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
+
+                    // Class Dropdown Selector
+                    if (availableClasses.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: availableClasses.contains(_selectedClass) ? _selectedClass : availableClasses.first,
+                            dropdownColor: AppColors.secondary,
+                            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            items: availableClasses.map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c, style: const TextStyle(color: Colors.white)),
+                            )).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedClass = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                // Search
+
+                // Search Bar
                 TextField(
                   onChanged: (val) {
                     setState(() {
@@ -232,42 +220,68 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
               ],
             ),
           ),
-          
-          // Squeezed filters
+
+          // Squeezed 4 Filter Chips
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
             child: Row(
               children: [
-                _buildFilterChip('All', 'all', allCount),
+                _buildFilterChip('All', 'all', allCount, AppColors.secondary),
                 const SizedBox(width: 6),
-                _buildFilterChip('Absent', 'absent', absentCount),
+                _buildFilterChip('Absent', 'absent', absentCount, const Color(0xFFE11D48)),
                 const SizedBox(width: 6),
-                _buildFilterChip('Fee Due', 'fees', feesCount),
+                _buildFilterChip('Fee Due', 'fees', feesCount, const Color(0xFFEA580C)),
                 const SizedBox(width: 6),
-                _buildFilterChip('Attn < 75%', 'attendance', attendanceCount),
+                _buildFilterChip('Attn < 75%', 'attendance', attendanceCount, const Color(0xFFC62828)),
               ],
             ),
           ),
-          
-          // Student List
+
+          // Fees Notice Banner if fees tab is selected
+          if (_activeFilter == 'fees')
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF3E0),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFE0B2)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 18, color: Color(0xFFEA580C)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Fees tracking and due status is currently in development in the School Admin Portal.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFFC2410C), fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Student List / Directory
           Expanded(
             child: appState.isLoadingStudents
                 ? const Center(
                     child: CircularProgressIndicator(
-                      color: AppColors.primary,
+                      color: AppColors.secondary,
                     ),
                   )
                 : RefreshIndicator(
                     onRefresh: () => appState.loadLiveData(),
-                    color: AppColors.primary,
+                    color: AppColors.secondary,
                     child: filteredStudents.isNotEmpty
                         ? ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                             itemCount: filteredStudents.length,
                             itemBuilder: (context, index) {
                               final s = filteredStudents[index];
+                              final isLowAttn = s.attendancePercentage < 75;
+
                               return Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.only(bottom: 10),
                                 child: Container(
                                   decoration: BoxDecoration(
                                     color: Colors.white,
@@ -290,56 +304,99 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                                       padding: const EdgeInsets.all(16),
                                       child: Row(
                                         children: [
-                                          // Roll avatar
+                                          // Roll / Initials Avatar
                                           Container(
-                                            width: 44,
-                                            height: 44,
-                                            decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
+                                            width: 46,
+                                            height: 46,
+                                            decoration: BoxDecoration(
+                                              color: s.absentToday
+                                                  ? const Color(0xFFFFEBEE)
+                                                  : AppColors.secondary.withOpacity(0.12),
+                                              shape: BoxShape.circle,
+                                            ),
                                             alignment: Alignment.center,
-                                             child: Text(
-                                               (s.rollNo.isNotEmpty && s.rollNo != '1')
-                                                   ? s.rollNo
-                                                   : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
-                                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                                             ),
+                                            child: Text(
+                                              (s.rollNo.isNotEmpty && s.rollNo != '1')
+                                                  ? s.rollNo
+                                                  : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
+                                              style: TextStyle(
+                                                color: s.absentToday ? const Color(0xFFC62828) : AppColors.secondary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
                                           ),
-                                          const SizedBox(width: 12),
-                                          
-                                          // Info
+                                          const SizedBox(width: 14),
+
+                                          // Student Info
                                           Expanded(
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  s.name,
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1F2937)),
+                                                Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        s.name,
+                                                        style: const TextStyle(
+                                                          fontWeight: FontWeight.bold,
+                                                          fontSize: 14,
+                                                          color: Color(0xFF1F2937),
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    // Attendance percentage chip
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(
+                                                        color: isLowAttn ? const Color(0xFFFFEBEE) : const Color(0xFFE0F2F1),
+                                                        borderRadius: BorderRadius.circular(8),
+                                                      ),
+                                                      child: Text(
+                                                        '${s.attendancePercentage.toInt()}%',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: isLowAttn ? const Color(0xFFC62828) : const Color(0xFF00796B),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  '${s.enrollmentNo} • ${s.gender}',
-                                                  style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
+                                                  '${s.studentClass} • GR: ${s.enrollmentNo}',
+                                                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
                                                 ),
-                                                
-                                                // Specific Status badges
-                                                if (s.absentToday || s.feeDefaulter || s.attendancePercentage < 75) ...[
-                                                  const SizedBox(height: 8),
-                                                  Wrap(
-                                                    spacing: 4,
-                                                    runSpacing: 4,
-                                                    children: [
-                                                      if (s.absentToday)
-                                                        _buildStatusBadge('Absent Today', Colors.red.shade50, Colors.red.shade600),
-                                                      if (s.feeDefaulter)
-                                                        _buildStatusBadge('Fee Due', AppColors.secondary.withOpacity(0.1), AppColors.secondary),
-                                                      if (s.attendancePercentage < 75)
-                                                        _buildStatusBadge('Attn: ${s.attendancePercentage.toInt()}%', Colors.red.shade50, Colors.red.shade600),
-                                                    ],
-                                                  ),
-                                                ],
+                                                const SizedBox(height: 6),
+
+                                                // Status tags row
+                                                Row(
+                                                  children: [
+                                                    if (s.absentToday)
+                                                      _buildStatusBadge('Absent Today', const Color(0xFFFFEBEE), const Color(0xFFC62828))
+                                                    else
+                                                      _buildStatusBadge('Present Today', const Color(0xFFE0F2F1), const Color(0xFF00796B)),
+                                                    const SizedBox(width: 6),
+                                                    if (s.parentName.isNotEmpty)
+                                                      Expanded(
+                                                        child: Text(
+                                                          'Parent: ${s.parentName}',
+                                                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
                                               ],
                                             ),
                                           ),
-                                          const Icon(Icons.person, color: Colors.grey, size: 20),
+                                          const SizedBox(width: 6),
+                                          const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
                                         ],
                                       ),
                                     ),
@@ -351,16 +408,35 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                         : ListView(
                             physics: const AlwaysScrollableScrollPhysics(),
                             children: [
-                              SizedBox(height: MediaQuery.of(context).size.height * 0.2),
-                              const Center(
+                              SizedBox(height: MediaQuery.of(context).size.height * 0.15),
+                              Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.person_outline, size: 48, color: Colors.grey),
-                                    SizedBox(height: 12),
+                                    Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(Icons.person_outline, size: 32, color: Colors.grey),
+                                    ),
+                                    const SizedBox(height: 12),
                                     Text(
-                                      'No students found',
-                                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                                      _activeFilter == 'absent'
+                                          ? 'No students absent today'
+                                          : _activeFilter == 'attendance'
+                                              ? 'All students have 75%+ attendance'
+                                              : 'No students found for this class',
+                                      style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _activeFilter == 'absent'
+                                          ? 'Full attendance recorded for this section today!'
+                                          : 'Try switching classes or adjusting search keywords.',
+                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
                                     ),
                                   ],
                                 ),
@@ -374,7 +450,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     );
   }
 
-  Widget _buildFilterChip(String label, String value, int count) {
+  Widget _buildFilterChip(String label, String value, int count, Color activeColor) {
     final bool isSelected = _activeFilter == value;
     return Expanded(
       child: InkWell(
@@ -383,9 +459,9 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.secondary : Colors.white,
+            color: isSelected ? activeColor : Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isSelected ? AppColors.secondary : const Color(0xFFE5E7EB)),
+            border: Border.all(color: isSelected ? activeColor : const Color(0xFFE5E7EB)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -393,8 +469,8 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.grey.shade600,
-                  fontSize: 8,
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                  fontSize: 9,
                   fontWeight: FontWeight.bold,
                 ),
                 maxLines: 1,
@@ -410,8 +486,8 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                 child: Text(
                   '$count',
                   style: TextStyle(
-                    color: isSelected ? Colors.white : Colors.grey.shade500,
-                    fontSize: 8,
+                    color: isSelected ? Colors.white : Colors.grey.shade700,
+                    fontSize: 9,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -427,9 +503,9 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     return Container(
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       child: Text(
         text.toUpperCase(),
         style: TextStyle(color: textC, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
@@ -465,7 +541,7 @@ class StudentProfileScreen extends StatelessWidget {
     return Scaffold(
       body: Column(
         children: [
-          // Header & Student Card
+          // Header & Student Banner
           Container(
             color: AppColors.secondary,
             padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
@@ -496,27 +572,27 @@ class StudentProfileScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                
-                // Student Card
+                const SizedBox(height: 20),
+
+                // Student Profile Card
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(18),
                   child: Row(
                     children: [
                       CircleAvatar(
-                        radius: 32,
+                        radius: 30,
                         backgroundColor: AppColors.secondary,
                         foregroundColor: Colors.white,
                         child: Text(
                           s.name.isNotEmpty ? s.name[0] : '?',
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,18 +600,54 @@ class StudentProfileScreen extends StatelessWidget {
                             Text(
                               s.name,
                               style: const TextStyle(
-                                fontSize: 18,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF1F2937),
                               ),
                             ),
                             const SizedBox(height: 2),
-                             Text(
-                               (s.rollNo.isNotEmpty && s.rollNo != '1')
-                                   ? 'Roll No: ${s.rollNo} • ${s.studentClass}'
-                                   : s.studentClass,
-                               style: const TextStyle(fontSize: 13, color: Colors.grey),
-                             ),
+                            Text(
+                              (s.rollNo.isNotEmpty && s.rollNo != '1')
+                                  ? 'Roll No: ${s.rollNo} • ${s.studentClass}'
+                                  : s.studentClass,
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: s.absentToday ? const Color(0xFFFFEBEE) : const Color(0xFFE0F2F1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    s.absentToday ? 'ABSENT TODAY' : 'PRESENT TODAY',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: s.absentToday ? const Color(0xFFC62828) : const Color(0xFF00796B),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: s.attendancePercentage < 75 ? const Color(0xFFFFEBEE) : const Color(0xFFE0F2F1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    '${s.attendancePercentage.toInt()}% Overall',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: s.attendancePercentage < 75 ? const Color(0xFFC62828) : const Color(0xFF00796B),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -545,38 +657,42 @@ class StudentProfileScreen extends StatelessWidget {
               ],
             ),
           ),
-          
-          // Details
+
+          // Details List
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                // Info block
+                // Academic Info Card
+                _buildSectionCard(
+                  icon: Icons.school_outlined,
+                  title: 'Academic Details',
+                  items: [
+                    {'label': 'Class & Section', 'value': s.studentClass},
+                    {'label': appState.translate('enrollmentNo'), 'value': s.enrollmentNo},
+                    {'label': 'Roll Number', 'value': s.rollNo.isNotEmpty ? s.rollNo : 'N/A'},
+                    {'label': 'Attendance Rate', 'value': '${s.attendancePercentage.toInt()}%'},
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Personal Info Card
                 _buildSectionCard(
                   icon: Icons.person_outline,
                   title: appState.translate('studentDetails'),
                   items: [
-                    {'label': appState.translate('enrollmentNo'), 'value': s.enrollmentNo},
                     {'label': appState.translate('dateOfBirth'), 'value': s.dateOfBirth},
                     {'label': appState.translate('gender'), 'value': s.gender},
                     {'label': appState.translate('bloodGroup'), 'value': s.bloodGroup},
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                // Parent block
-                _buildSectionCard(
-                  icon: Icons.phone_outlined,
-                  title: appState.translate('parentName'),
-                  items: [
-                    {'label': appState.translate('name'), 'value': s.parentName},
-                    {'label': appState.translate('mobile'), 'value': s.parentMobile, 'isPhone': true},
-                    {'label': appState.translate('emergencyContact'), 'value': s.emergencyContact, 'isPhone': true},
-                  ],
-                ),
+
+                // Parent / Guardian Card with Call & Message actions
+                _buildParentSectionCard(context, s),
                 const SizedBox(height: 16),
-                
-                // Address block
+
+                // Address Card
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -601,7 +717,7 @@ class StudentProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        s.address,
+                        s.address.isNotEmpty ? s.address : 'School Address on Record',
                         style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
                       ),
                     ],
@@ -612,6 +728,72 @@ class StudentProfileScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildParentSectionCard(BuildContext context, Student s) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [
+          BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.family_restroom_outlined, color: AppColors.secondary),
+                  SizedBox(width: 8),
+                  Text(
+                    'Parent & Guardian',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                  ),
+                ],
+              ),
+              if (s.parentMobile.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.call, color: AppColors.secondary, size: 20),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Calling parent: ${s.parentMobile}'),
+                        backgroundColor: AppColors.secondary,
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildInfoRow('Parent Name', s.parentName),
+          const SizedBox(height: 8),
+          _buildInfoRow('Primary Mobile', s.parentMobile),
+          if (s.emergencyContact.isNotEmpty && s.emergencyContact != s.parentMobile) ...[
+            const SizedBox(height: 8),
+            _buildInfoRow('Emergency Contact', s.emergencyContact),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+        Text(
+          value.isNotEmpty ? value : 'N/A',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF374151), fontSize: 13),
+        ),
+      ],
     );
   }
 
@@ -645,7 +827,6 @@ class StudentProfileScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Column(
             children: items.map((item) {
-              final bool isPhone = item['isPhone'] as bool? ?? false;
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(
@@ -655,23 +836,14 @@ class StudentProfileScreen extends StatelessWidget {
                       '${item['label']}:',
                       style: const TextStyle(color: Colors.grey, fontSize: 13),
                     ),
-                    isPhone
-                        ? Text(
-                            item['value']!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.secondary,
-                              fontSize: 13,
-                            ),
-                          )
-                        : Text(
-                            item['value']!,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF374151),
-                              fontSize: 13,
-                            ),
-                          ),
+                    Text(
+                      item['value'] != null && item['value'].toString().isNotEmpty ? item['value'].toString() : 'N/A',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF374151),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
               );

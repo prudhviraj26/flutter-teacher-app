@@ -180,7 +180,20 @@ class AppState extends ChangeNotifier {
         // Fallback to fetch all students in school if section filter returns empty
         liveStudents = await TeacherDataService.fetchStudents();
       }
-      _students = liveStudents;
+      if (liveStudents.isNotEmpty) {
+        _students = liveStudents;
+      } else {
+        if (_students.isEmpty) {
+          _initMockData();
+        }
+        final teacherClass = _teacher?.assignedClass ?? 'Grade 10 A';
+        _students = _students.map((s) {
+          if (s.studentClass.isEmpty || s.studentClass == 'Class' || s.studentClass == 'Grade 3-B') {
+            return s.copyWith(studentClass: teacherClass);
+          }
+          return s;
+        }).toList();
+      }
 
       // Fetch live subject assignments if current subjects are empty or default to General
       if (_teacher != null && (_teacher!.subjects.isEmpty || _teacher!.subjects.contains('General'))) {
@@ -780,18 +793,19 @@ class AppState extends ChangeNotifier {
 
   // Load static lists matching mockData.ts
   void _initMockData() {
-    // 1. Students list (Grade 3-B)
+    final defaultClass = _teacher?.assignedClass ?? 'Grade 10 A';
+    // 1. Students list
     _students = [
-      Student(id: 'S001', name: 'Aarav Sharma', rollNo: '1', enrollmentNo: 'VIS2021001', studentClass: 'Grade 3-B', dateOfBirth: '15-08-2017', gender: 'Male', parentName: 'Rajesh Sharma', parentMobile: '+91 98765 43210', address: 'Flat 302, Sunrise Apartments, Bandra West, Mumbai - 400050', bloodGroup: 'O+', emergencyContact: '+91 98765 99999', absentToday: false, feeDefaulter: false, attendancePercentage: 96),
-      Student(id: 'S002', name: 'Aisha Khan', rollNo: '2', enrollmentNo: 'VIS2021002', studentClass: 'Grade 3-B', dateOfBirth: '22-03-2017', gender: 'Female', parentName: 'Imran Khan', parentMobile: '+91 98765 43211', address: 'B-104, Green Valley, Andheri East, Mumbai - 400069', bloodGroup: 'A+', emergencyContact: '+91 98765 99998', absentToday: false, feeDefaulter: true, attendancePercentage: 92),
-      Student(id: 'S003', name: 'Aryan Patil', rollNo: '3', enrollmentNo: 'VIS2021003', studentClass: 'Grade 3-B', dateOfBirth: '10-11-2017', gender: 'Male', parentName: 'Suresh Patil', parentMobile: '+91 98765 43212', address: '15/A, Sai Krupa, Dadar West, Mumbai - 400028', bloodGroup: 'B+', emergencyContact: '+91 98765 99997', absentToday: true, feeDefaulter: false, attendancePercentage: 95),
-      Student(id: 'S004', name: 'Diya Deshmukh', rollNo: '4', enrollmentNo: 'VIS2021004', studentClass: 'Grade 3-B', dateOfBirth: '05-07-2017', gender: 'Female', parentName: 'Pradeep Deshmukh', parentMobile: '+91 98765 43213', address: 'Plot 42, Shivaji Nagar, Pune - 411016', bloodGroup: 'AB+', emergencyContact: '+91 98765 99996', absentToday: false, feeDefaulter: false, attendancePercentage: 98),
-      Student(id: 'S005', name: 'Ishaan Joshi', rollNo: '5', enrollmentNo: 'VIS2021005', studentClass: 'Grade 3-B', dateOfBirth: '18-01-2018', gender: 'Male', parentName: 'Amit Joshi', parentMobile: '+91 98765 43214', address: '7th Floor, Tower B, Orchid Heights, Powai, Mumbai - 400076', bloodGroup: 'O+', emergencyContact: '+91 98765 99995', absentToday: false, feeDefaulter: false, attendancePercentage: 72),
-      Student(id: 'S006', name: 'Kavya Menon', rollNo: '6', enrollmentNo: 'VIS2021006', studentClass: 'Grade 3-B', dateOfBirth: '29-09-2017', gender: 'Female', parentName: 'Vinod Menon', parentMobile: '+91 98765 43215', address: 'C-201, Marina Heights, Juhu, Mumbai - 400049', bloodGroup: 'A+', emergencyContact: '+91 98765 99994', absentToday: false, feeDefaulter: false, attendancePercentage: 94),
-      Student(id: 'S007', name: 'Lakshmi Nair', rollNo: '7', enrollmentNo: 'VIS2021007', studentClass: 'Grade 3-B', dateOfBirth: '12-04-2017', gender: 'Female', parentName: 'Ramesh Nair', parentMobile: '+91 98765 43216', address: 'House No. 88, Sector 7, Vashi, Navi Mumbai - 400703', bloodGroup: 'B+', emergencyContact: '+91 98765 99993', absentToday: true, feeDefaulter: false, attendancePercentage: 91),
-      Student(id: 'S008', name: 'Rohan Kapoor', rollNo: '8', enrollmentNo: 'VIS2021008', studentClass: 'Grade 3-B', dateOfBirth: '03-06-2017', gender: 'Male', parentName: 'Sanjay Kapoor', parentMobile: '+91 98765 43217', address: '12-B, Shanti Niwas, Colaba, Mumbai - 400005', bloodGroup: 'O-', emergencyContact: '+91 98765 99992', absentToday: false, feeDefaulter: true, attendancePercentage: 93),
-      Student(id: 'S009', name: 'Saanvi Reddy', rollNo: '9', enrollmentNo: 'VIS2021009', studentClass: 'Grade 3-B', dateOfBirth: '25-12-2017', gender: 'Female', parentName: 'Krishna Reddy', parentMobile: '+91 98765 43218', address: 'Flat 501, Lakeview Apartments, Banjara Hills, Hyderabad - 500034', bloodGroup: 'A-', emergencyContact: '+91 98765 99991', absentToday: false, feeDefaulter: false, attendancePercentage: 68),
-      Student(id: 'S010', name: 'Vihaan Singh', rollNo: '10', enrollmentNo: 'VIS2021010', studentClass: 'Grade 3-B', dateOfBirth: '14-02-2018', gender: 'Male', parentName: 'Vikram Singh', parentMobile: '+91 98765 43219', address: 'Villa 23, Palm Grove Society, Thane West, Mumbai - 400601', bloodGroup: 'AB-', emergencyContact: '+91 98765 99990', absentToday: false, feeDefaulter: false, attendancePercentage: 97),
+      Student(id: 'S001', name: 'Aarav Sharma', rollNo: '1', enrollmentNo: 'VIS2021001', studentClass: defaultClass, dateOfBirth: '15-08-2017', gender: 'Male', parentName: 'Rajesh Sharma', parentMobile: '+91 98765 43210', address: 'Flat 302, Sunrise Apartments, Bandra West, Mumbai - 400050', bloodGroup: 'O+', emergencyContact: '+91 98765 99999', absentToday: false, feeDefaulter: false, attendancePercentage: 96),
+      Student(id: 'S002', name: 'Aisha Khan', rollNo: '2', enrollmentNo: 'VIS2021002', studentClass: defaultClass, dateOfBirth: '22-03-2017', gender: 'Female', parentName: 'Imran Khan', parentMobile: '+91 98765 43211', address: 'B-104, Green Valley, Andheri East, Mumbai - 400069', bloodGroup: 'A+', emergencyContact: '+91 98765 99998', absentToday: false, feeDefaulter: true, attendancePercentage: 92),
+      Student(id: 'S003', name: 'Aryan Patil', rollNo: '3', enrollmentNo: 'VIS2021003', studentClass: defaultClass, dateOfBirth: '10-11-2017', gender: 'Male', parentName: 'Suresh Patil', parentMobile: '+91 98765 43212', address: '15/A, Sai Krupa, Dadar West, Mumbai - 400028', bloodGroup: 'B+', emergencyContact: '+91 98765 99997', absentToday: true, feeDefaulter: false, attendancePercentage: 95),
+      Student(id: 'S004', name: 'Diya Deshmukh', rollNo: '4', enrollmentNo: 'VIS2021004', studentClass: defaultClass, dateOfBirth: '05-07-2017', gender: 'Female', parentName: 'Pradeep Deshmukh', parentMobile: '+91 98765 43213', address: 'Plot 42, Shivaji Nagar, Pune - 411016', bloodGroup: 'AB+', emergencyContact: '+91 98765 99996', absentToday: false, feeDefaulter: false, attendancePercentage: 98),
+      Student(id: 'S005', name: 'Ishaan Joshi', rollNo: '5', enrollmentNo: 'VIS2021005', studentClass: defaultClass, dateOfBirth: '18-01-2018', gender: 'Male', parentName: 'Amit Joshi', parentMobile: '+91 98765 43214', address: '7th Floor, Tower B, Orchid Heights, Powai, Mumbai - 400076', bloodGroup: 'O+', emergencyContact: '+91 98765 99995', absentToday: false, feeDefaulter: false, attendancePercentage: 72),
+      Student(id: 'S006', name: 'Kavya Menon', rollNo: '6', enrollmentNo: 'VIS2021006', studentClass: defaultClass, dateOfBirth: '29-09-2017', gender: 'Female', parentName: 'Vinod Menon', parentMobile: '+91 98765 43215', address: 'C-201, Marina Heights, Juhu, Mumbai - 400049', bloodGroup: 'A+', emergencyContact: '+91 98765 99994', absentToday: false, feeDefaulter: false, attendancePercentage: 94),
+      Student(id: 'S007', name: 'Lakshmi Nair', rollNo: '7', enrollmentNo: 'VIS2021007', studentClass: defaultClass, dateOfBirth: '12-04-2017', gender: 'Female', parentName: 'Ramesh Nair', parentMobile: '+91 98765 43216', address: 'House No. 88, Sector 7, Vashi, Navi Mumbai - 400703', bloodGroup: 'B+', emergencyContact: '+91 98765 99993', absentToday: true, feeDefaulter: false, attendancePercentage: 91),
+      Student(id: 'S008', name: 'Rohan Kapoor', rollNo: '8', enrollmentNo: 'VIS2021008', studentClass: defaultClass, dateOfBirth: '03-06-2017', gender: 'Male', parentName: 'Sanjay Kapoor', parentMobile: '+91 98765 43217', address: '12-B, Shanti Niwas, Colaba, Mumbai - 400005', bloodGroup: 'O-', emergencyContact: '+91 98765 99992', absentToday: false, feeDefaulter: true, attendancePercentage: 93),
+      Student(id: 'S009', name: 'Saanvi Reddy', rollNo: '9', enrollmentNo: 'VIS2021009', studentClass: defaultClass, dateOfBirth: '25-12-2017', gender: 'Female', parentName: 'Krishna Reddy', parentMobile: '+91 98765 43218', address: 'Flat 501, Lakeview Apartments, Banjara Hills, Hyderabad - 500034', bloodGroup: 'A-', emergencyContact: '+91 98765 99991', absentToday: false, feeDefaulter: false, attendancePercentage: 68),
+      Student(id: 'S010', name: 'Vihaan Singh', rollNo: '10', enrollmentNo: 'VIS2021010', studentClass: defaultClass, dateOfBirth: '14-02-2018', gender: 'Male', parentName: 'Vikram Singh', parentMobile: '+91 98765 43219', address: 'Villa 23, Palm Grove Society, Thane West, Mumbai - 400601', bloodGroup: 'AB-', emergencyContact: '+91 98765 99990', absentToday: false, feeDefaulter: false, attendancePercentage: 97),
     ];
 
     // 2. Announcements list

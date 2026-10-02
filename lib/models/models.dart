@@ -72,6 +72,7 @@ class Student {
   final String gender;
   final String parentName;
   final String parentMobile;
+  final String? parentEmail;
   final String address;
   final String bloodGroup;
   final String emergencyContact;
@@ -89,6 +90,7 @@ class Student {
     required this.gender,
     required this.parentName,
     required this.parentMobile,
+    this.parentEmail,
     required this.address,
     required this.bloodGroup,
     required this.emergencyContact,
@@ -96,6 +98,44 @@ class Student {
     this.feeDefaulter = false,
     this.attendancePercentage = 100.0,
   });
+
+  Student copyWith({
+    String? id,
+    String? name,
+    String? rollNo,
+    String? enrollmentNo,
+    String? studentClass,
+    String? dateOfBirth,
+    String? gender,
+    String? parentName,
+    String? parentMobile,
+    String? parentEmail,
+    String? address,
+    String? bloodGroup,
+    String? emergencyContact,
+    bool? absentToday,
+    bool? feeDefaulter,
+    double? attendancePercentage,
+  }) {
+    return Student(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      rollNo: rollNo ?? this.rollNo,
+      enrollmentNo: enrollmentNo ?? this.enrollmentNo,
+      studentClass: studentClass ?? this.studentClass,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      gender: gender ?? this.gender,
+      parentName: parentName ?? this.parentName,
+      parentMobile: parentMobile ?? this.parentMobile,
+      parentEmail: parentEmail ?? this.parentEmail,
+      address: address ?? this.address,
+      bloodGroup: bloodGroup ?? this.bloodGroup,
+      emergencyContact: emergencyContact ?? this.emergencyContact,
+      absentToday: absentToday ?? this.absentToday,
+      feeDefaulter: feeDefaulter ?? this.feeDefaulter,
+      attendancePercentage: attendancePercentage ?? this.attendancePercentage,
+    );
+  }
 }
 
 class Notice {
