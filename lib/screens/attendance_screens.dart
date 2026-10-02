@@ -2,10 +2,204 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
+import '../models/models.dart';
+
+void showAbsentReasonModal({
+  required BuildContext context,
+  required Student student,
+  required AppState appState,
+  VoidCallback? onSaved,
+}) {
+  final initialReason = appState.tempAttendanceReasons[student.id] ?? '';
+  final TextEditingController textController = TextEditingController(text: initialReason);
+  String selectedPreset = initialReason;
+
+  final List<String> presetReasons = [
+    'Sick / Medical',
+    'Family Function',
+    'Out of Town / Vacation',
+    'Transport Issue',
+    'Uninformed Absence',
+    'Personal / Other',
+  ];
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => StatefulBuilder(
+      builder: (context, setModalState) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(28),
+              topRight: Radius.circular(28),
+            ),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.assignment_late_outlined, color: Color(0xFFDC2626), size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Reason for Absence',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                          ),
+                          Text(
+                            '${student.name} • ${student.rollNo.isNotEmpty && student.rollNo != "1" ? "Roll ${student.rollNo}" : student.studentClass}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              const Text(
+                'Select a reason (Required):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF4B5563)),
+              ),
+              const SizedBox(height: 10),
+
+              // Preset chips
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: presetReasons.map((preset) {
+                  final isSelected = selectedPreset == preset || textController.text.trim() == preset;
+                  return ChoiceChip(
+                    label: Text(
+                      preset,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.white : const Color(0xFF374151),
+                      ),
+                    ),
+                    selected: isSelected,
+                    selectedColor: const Color(0xFFDC2626),
+                    backgroundColor: const Color(0xFFF3F4F6),
+                    onSelected: (val) {
+                      setModalState(() {
+                        selectedPreset = preset;
+                        textController.text = preset;
+                      });
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              // Custom text input
+              TextField(
+                controller: textController,
+                onChanged: (val) {
+                  setModalState(() {
+                    selectedPreset = val;
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Or enter custom reason...',
+                  hintStyle: const TextStyle(fontSize: 12, color: Colors.grey),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFDC2626)),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Save Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: textController.text.trim().isEmpty
+                      ? null
+                      : () {
+                          final chosenReason = textController.text.trim();
+                          appState.updateTempAttendance(student.id, 'A');
+                          appState.updateTempAttendanceReason(student.id, chosenReason);
+                          Navigator.pop(context);
+                          if (onSaved != null) onSaved();
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    disabledBackgroundColor: Colors.grey.shade300,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text(
+                    'Save Reason & Mark Absent',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
+}
 
 // 1. ROLL CALL SCREEN
-class AttendanceRollCallScreen extends StatelessWidget {
+class AttendanceRollCallScreen extends StatefulWidget {
   const AttendanceRollCallScreen({super.key});
+
+  @override
+  State<AttendanceRollCallScreen> createState() => _AttendanceRollCallScreenState();
+}
+
+class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = Provider.of<AppState>(context, listen: false);
+      appState.loadLiveData();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -282,100 +476,164 @@ class AttendanceRollCallScreen extends StatelessWidget {
 
             // Student List
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                itemCount: students.length,
-                itemBuilder: (context, index) {
-                  final student = students[index];
-                  final status = appState.tempAttendance[student.id] ?? 'P';
-                  final isPresent = status == 'P';
+              child: RefreshIndicator(
+                onRefresh: () => appState.loadLiveData(),
+                color: AppColors.primary,
+                child: ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  itemCount: students.length,
+                  itemBuilder: (context, index) {
+                    final student = students[index];
+                    final status = appState.tempAttendance[student.id] ?? 'P';
+                    final isPresent = status == 'P';
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x05000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          )
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                student.name,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1F2937),
-                                ),
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x05000000),
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            )
+                          ],
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    student.name,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1F2937),
+                                    ),
+                                  ),
+                                  if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Roll No: ${student.rollNo}',
+                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ],
+                                  if (!isPresent) ...[
+                                    const SizedBox(height: 4),
+                                    GestureDetector(
+                                      onTap: () => showAbsentReasonModal(
+                                        context: context,
+                                        student: student,
+                                        appState: appState,
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: (appState.tempAttendanceReasons[student.id] ?? '').isNotEmpty
+                                              ? const Color(0xFFFEE2E2)
+                                              : const Color(0xFFFEF2F2),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(
+                                            color: (appState.tempAttendanceReasons[student.id] ?? '').isNotEmpty
+                                                ? const Color(0xFFFECACA)
+                                                : const Color(0xFFEF4444),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              (appState.tempAttendanceReasons[student.id] ?? '').isNotEmpty
+                                                  ? Icons.edit_note
+                                                  : Icons.error_outline,
+                                              size: 13,
+                                              color: const Color(0xFFDC2626),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                (appState.tempAttendanceReasons[student.id] ?? '').isNotEmpty
+                                                    ? 'Reason: ${appState.tempAttendanceReasons[student.id]}'
+                                                    : 'Reason required • Tap to select',
+                                                style: const TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFFDC2626),
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                              if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Roll No: ${student.rollNo}',
-                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+
+                            // Present/Absent buttons
+                            Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => appState.updateTempAttendance(student.id, 'P'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isPresent ? AppColors.primary : const Color(0xFFF3F4F6),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      appState.translate('present'),
+                                      style: TextStyle(
+                                        color: isPresent ? Colors.white : Colors.grey,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: () {
+                                    appState.updateTempAttendance(student.id, 'A');
+                                    showAbsentReasonModal(
+                                      context: context,
+                                      student: student,
+                                      appState: appState,
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: !isPresent ? const Color(0xFFEF4444) : const Color(0xFFF3F4F6),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      appState.translate('absent'),
+                                      style: TextStyle(
+                                        color: !isPresent ? Colors.white : Colors.grey,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
-                            ],
-                          ),
-
-                          // Present/Absent buttons
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () => appState.updateTempAttendance(student.id, 'P'),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: isPresent ? AppColors.primary : const Color(0xFFF3F4F6),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    appState.translate('present'),
-                                    style: TextStyle(
-                                      color: isPresent ? Colors.white : Colors.grey,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => appState.updateTempAttendance(student.id, 'A'),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: !isPresent ? const Color(0xFFEF4444) : const Color(0xFFF3F4F6),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    appState.translate('absent'),
-                                    style: TextStyle(
-                                      color: !isPresent ? Colors.white : Colors.grey,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
 
@@ -389,7 +647,32 @@ class AttendanceRollCallScreen extends StatelessWidget {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pushNamed(context, '/attendance/confirm'),
+                  onPressed: () {
+                    final absentWithoutReason = appState.students.where((s) {
+                      final isAbsent = (appState.tempAttendance[s.id] ?? 'P') == 'A';
+                      final reason = (appState.tempAttendanceReasons[s.id] ?? '').trim();
+                      return isAbsent && reason.isEmpty;
+                    }).toList();
+
+                    if (absentWithoutReason.isNotEmpty) {
+                      final first = absentWithoutReason.first;
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Please provide an absent reason for ${first.name}${absentWithoutReason.length > 1 ? " and ${absentWithoutReason.length - 1} more" : ""}.'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      showAbsentReasonModal(
+                        context: context,
+                        student: first,
+                        appState: appState,
+                      );
+                      return;
+                    }
+
+                    Navigator.pushNamed(context, '/attendance/confirm');
+                  },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     backgroundColor: AppColors.primary,
@@ -577,28 +860,90 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                     itemCount: absentStudents.length,
                     itemBuilder: (context, index) {
                       final s = absentStudents[index];
+                      final reason = (appState.tempAttendanceReasons[s.id] ?? '').trim();
+
                       return Card(
                         color: Colors.red.shade50,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          side: BorderSide(
+                            color: reason.isNotEmpty ? Colors.red.shade100 : Colors.red.shade300,
+                          ),
+                        ),
+                        margin: const EdgeInsets.only(bottom: 10),
                         child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                           leading: const CircleAvatar(
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
-                            radius: 14,
-                            child: Icon(Icons.close, size: 14),
+                            radius: 16,
+                            child: Icon(Icons.close, size: 16),
                           ),
                           title: Text(
                             s.name,
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14),
                           ),
-                          subtitle: (s.rollNo.isNotEmpty && s.rollNo != '1')
-                              ? Text(
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (s.rollNo.isNotEmpty && s.rollNo != '1') ...[
+                                Text(
                                   'Roll No: ${s.rollNo}',
                                   style: TextStyle(color: Colors.red.shade700, fontSize: 11),
-                                )
-                              : null,
+                                ),
+                                const SizedBox(height: 2),
+                              ],
+                              GestureDetector(
+                                onTap: () => showAbsentReasonModal(
+                                  context: context,
+                                  student: s,
+                                  appState: appState,
+                                ),
+                                child: Container(
+                                  margin: const EdgeInsets.only(top: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: reason.isNotEmpty ? Colors.white : const Color(0xFFFFCDD2),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: reason.isNotEmpty ? Colors.red.shade200 : Colors.red,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        reason.isNotEmpty ? Icons.edit_note : Icons.warning_amber_rounded,
+                                        size: 13,
+                                        color: Colors.red.shade800,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text(
+                                          reason.isNotEmpty ? 'Reason: $reason' : 'Reason required • Tap to add',
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red.shade800,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: Colors.red, size: 18),
+                            onPressed: () => showAbsentReasonModal(
+                              context: context,
+                              student: s,
+                              appState: appState,
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -620,14 +965,38 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                 onPressed: appState.isSubmittingAttendance
                     ? null
                     : () async {
+                        final absentWithoutReason = absentStudents.where((s) {
+                          final reason = (appState.tempAttendanceReasons[s.id] ?? '').trim();
+                          return reason.isEmpty;
+                        }).toList();
+
+                        if (absentWithoutReason.isNotEmpty) {
+                          final first = absentWithoutReason.first;
+                          ScaffoldMessenger.of(context).clearSnackBars();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Please provide an absent reason for ${first.name}.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          showAbsentReasonModal(
+                            context: context,
+                            student: first,
+                            appState: appState,
+                          );
+                          return;
+                        }
+
                         final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
                         if (context.mounted) {
                           if (success) {
                             Navigator.pushReplacementNamed(context, '/attendance/submitted');
                           } else {
+                            final err = appState.lastAttendanceError ?? 'Failed to submit attendance. Please try again.';
+                            ScaffoldMessenger.of(context).clearSnackBars();
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Failed to submit attendance. Please try again.'),
+                              SnackBar(
+                                content: Text(err),
                                 backgroundColor: Colors.red,
                               ),
                             );
@@ -769,6 +1138,9 @@ class AttendanceSubmittedScreen extends StatelessWidget {
                     if (history.isNotEmpty) {
                       for (var r in history.first.records) {
                         appState.updateTempAttendance(r.studentId, r.status);
+                        if (r.status == 'A' && r.reason != null && r.reason!.isNotEmpty) {
+                          appState.updateTempAttendanceReason(r.studentId, r.reason!);
+                        }
                       }
                     }
                     Navigator.pushReplacementNamed(context, '/attendance/correction');
@@ -883,6 +1255,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                 final student = students[index];
                 final status = appState.tempAttendance[student.id] ?? 'P';
                 final isPresent = status == 'P';
+                final reason = (appState.tempAttendanceReasons[student.id] ?? '').trim();
                 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -902,25 +1275,69 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              student.name,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1F2937),
-                              ),
-                            ),
-                            if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
-                              const SizedBox(height: 2),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                'Roll No: ${student.rollNo}',
-                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                student.name,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1F2937),
+                                ),
                               ),
+                              if (student.rollNo.isNotEmpty && student.rollNo != '1') ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Roll No: ${student.rollNo}',
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
+                              if (!isPresent) ...[
+                                const SizedBox(height: 4),
+                                GestureDetector(
+                                  onTap: () => showAbsentReasonModal(
+                                    context: context,
+                                    student: student,
+                                    appState: appState,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: reason.isNotEmpty ? const Color(0xFFFEE2E2) : const Color(0xFFFEF2F2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: reason.isNotEmpty ? const Color(0xFFFECACA) : const Color(0xFFEF4444),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          reason.isNotEmpty ? Icons.edit_note : Icons.error_outline,
+                                          size: 13,
+                                          color: const Color(0xFFDC2626),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Flexible(
+                                          child: Text(
+                                            reason.isNotEmpty ? 'Reason: $reason' : 'Reason required • Tap to select',
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFFDC2626),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                         
                         // Present/Absent buttons
@@ -946,7 +1363,14 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             GestureDetector(
-                              onTap: () => appState.updateTempAttendance(student.id, 'A'),
+                              onTap: () {
+                                appState.updateTempAttendance(student.id, 'A');
+                                showAbsentReasonModal(
+                                  context: context,
+                                  student: student,
+                                  appState: appState,
+                                );
+                              },
                               child: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                                 decoration: BoxDecoration(
@@ -986,19 +1410,48 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                 onPressed: appState.isSubmittingAttendance
                     ? null
                     : () async {
-                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
-                        if (context.mounted) {
+                        final absentWithoutReason = students.where((s) {
+                          final isAbsent = (appState.tempAttendance[s.id] ?? 'P') == 'A';
+                          final reason = (appState.tempAttendanceReasons[s.id] ?? '').trim();
+                          return isAbsent && reason.isEmpty;
+                        }).toList();
+
+                        if (absentWithoutReason.isNotEmpty) {
+                          final first = absentWithoutReason.first;
                           ScaffoldMessenger.of(context).clearSnackBars();
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(success
-                                  ? appState.translate('attendanceCorrected')
-                                  : 'Failed to update attendance'),
-                              backgroundColor: success ? AppColors.success : Colors.red,
+                              content: Text('Please provide an absent reason for ${first.name}.'),
+                              backgroundColor: Colors.red,
                             ),
                           );
+                          showAbsentReasonModal(
+                            context: context,
+                            student: first,
+                            appState: appState,
+                          );
+                          return;
+                        }
+
+                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).clearSnackBars();
                           if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(appState.translate('attendanceCorrected')),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
                             Navigator.pushReplacementNamed(context, '/home');
+                          } else {
+                            final err = appState.lastAttendanceError ?? 'Failed to update attendance';
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(err),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
                           }
                         }
                       },

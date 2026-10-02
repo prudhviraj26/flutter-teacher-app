@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import '../services/attachment_helper.dart';
 
 class ParentConnectScreen extends StatefulWidget {
   const ParentConnectScreen({super.key});
@@ -14,6 +15,16 @@ class ParentConnectScreen extends StatefulWidget {
 class _ParentConnectScreenState extends State<ParentConnectScreen> {
   String _searchQuery = '';
   String _newChatSearchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final appState = Provider.of<AppState>(context, listen: false);
+      appState.refreshBroadcasts();
+      appState.loadLiveData();
+    });
+  }
 
   void _showNewChatBottomSheet(BuildContext context, AppState appState) {
     showModalBottomSheet(
@@ -394,8 +405,15 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
               
               // Conversations List
               Expanded(
-                child: conversations.isNotEmpty
-                    ? ListView.builder(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await appState.refreshBroadcasts();
+                    await appState.loadLiveData();
+                  },
+                  color: AppColors.secondary,
+                  child: conversations.isNotEmpty
+                      ? ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 80),
                         itemCount: conversations.length,
                         itemBuilder: (context, index) {
@@ -566,21 +584,28 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                           );
                         },
                       )
-                    : Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
-                            const SizedBox(height: 12),
-                            const Text('No conversations found', style: TextStyle(fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Tap + New Conversation to start a message thread.',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    : ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey),
+                                const SizedBox(height: 12),
+                                const Text('No conversations found', style: TextStyle(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Tap + New Conversation to start a message thread.',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                ),
               ),
             ],
           ),
@@ -684,7 +709,28 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     });
   }
 
-  void _simulateFileAttachment(AppState appState, String fileName) {
+  Future<void> _handleAttachCamera(AppState appState) async {
+    final result = await AttachmentHelper.pickFromCamera();
+    if (result != null) {
+      _sendAttachedFile(appState, result.name);
+    }
+  }
+
+  Future<void> _handleAttachGallery(AppState appState) async {
+    final result = await AttachmentHelper.pickFromGallery();
+    if (result != null) {
+      _sendAttachedFile(appState, result.name);
+    }
+  }
+
+  Future<void> _handleAttachFileManager(AppState appState) async {
+    final result = await AttachmentHelper.pickFromFileManager();
+    if (result != null) {
+      _sendAttachedFile(appState, result.name);
+    }
+  }
+
+  void _sendAttachedFile(AppState appState, String fileName) {
     final now = DateTime.now();
     final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
@@ -704,7 +750,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Document attached!')),
+      SnackBar(content: Text('Attached: $fileName')),
     );
     _scrollToBottom();
   }
@@ -926,10 +972,14 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                               padding: const EdgeInsets.all(10),
                               child: Row(
                                 children: [
-                                  const CircleAvatar(
+                                  CircleAvatar(
                                     backgroundColor: Colors.white,
                                     radius: 16,
-                                    child: Icon(Icons.picture_as_pdf, color: Colors.red, size: 16),
+                                    child: Icon(
+                                      AttachmentHelper.getFileIcon(msg.attachmentName!),
+                                      color: AttachmentHelper.getFileColor(msg.attachmentName!),
+                                      size: 16,
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -1076,9 +1126,9 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                             ],
                           ),
                           const SizedBox(height: 16),
-                          _buildAttachOption(Icons.camera_alt, 'Camera', 'Take photo using camera', () => _simulateFileAttachment(appState, 'photo_captured.jpg')),
-                          _buildAttachOption(Icons.image, 'Gallery', 'Upload photo from gallery', () => _simulateFileAttachment(appState, 'gallery_pic.png')),
-                          _buildAttachOption(Icons.folder, 'File Manager', 'PDF or Word Documents only', () => _simulateFileAttachment(appState, 'syllabus_term2.pdf')),
+                          _buildAttachOption(Icons.camera_alt, 'Camera', 'Take photo using camera', () => _handleAttachCamera(appState)),
+                          _buildAttachOption(Icons.image, 'Gallery', 'Upload photo from gallery', () => _handleAttachGallery(appState)),
+                          _buildAttachOption(Icons.folder, 'File Manager', 'PDF, docs, or files from device', () => _handleAttachFileManager(appState)),
                         ],
                       ),
                     ),

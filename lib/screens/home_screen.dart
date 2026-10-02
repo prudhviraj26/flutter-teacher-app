@@ -142,11 +142,15 @@ class HomeScreen extends StatelessWidget {
           
           // Menu Grid & Scrollable Content
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  GridView.count(
+            child: RefreshIndicator(
+              onRefresh: () => appState.loadLiveData(),
+              color: AppColors.primary,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    GridView.count(
                     crossAxisCount: 2,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -261,9 +265,10 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-      bottomNavigationBar: const CustomBottomNavBar(currentRoute: '/home'),
+        ),
+      ],
+    ),
+    bottomNavigationBar: const CustomBottomNavBar(currentRoute: '/home'),
     );
   }
 }

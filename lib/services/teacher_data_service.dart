@@ -54,7 +54,7 @@ class TeacherDataService {
   }
 
   // Submit/Upsert Attendance Session
-  static Future<bool> submitAttendance({
+  static Future<String?> submitAttendance({
     required String sectionId,
     required String date,
     required List<Map<String, String>> records,
@@ -65,10 +65,11 @@ class TeacherDataService {
         'date': date,
         'records': records,
       });
-      return true;
+      return null; // null represents success
     } catch (e) {
       debugPrint('TeacherDataService.submitAttendance error: $e');
-      return false;
+      final errStr = e.toString().replaceAll('Exception: ', '').trim();
+      return errStr.isNotEmpty ? errStr : 'Failed to submit attendance. Please try again.';
     }
   }
 
@@ -94,6 +95,37 @@ class TeacherDataService {
       debugPrint('TeacherDataService.fetchBroadcasts error: $e');
     }
     return [];
+  }
+
+  // Post Broadcast / Class Announcement / Homework from Teacher App
+  static Future<bool> createBroadcast({
+    required String title,
+    required String message,
+    required String targetType, // 'class' | 'section' | 'school' | 'staff_only'
+    String? targetClassId,
+    List<String>? targetClassIds,
+    String? targetSectionId,
+    List<String>? attachments,
+    String? scheduledFor,
+  }) async {
+    try {
+      final payload = {
+        'title': title,
+        'body': message,
+        'targetType': targetType,
+        'channels': ['in_app', 'push_fcm'],
+        if (targetClassId != null) 'targetClassId': targetClassId,
+        if (targetClassIds != null) 'targetClassIds': targetClassIds,
+        if (targetSectionId != null) 'targetSectionId': targetSectionId,
+        if (attachments != null && attachments.isNotEmpty) 'attachments': attachments,
+        if (scheduledFor != null) 'scheduledFor': scheduledFor,
+      };
+      final res = await ApiService.post('/communication/broadcasts', payload);
+      return res != null;
+    } catch (e) {
+      debugPrint('TeacherDataService.createBroadcast error: $e');
+      return false;
+    }
   }
 
   // Fetch Staff Subject Assignments
@@ -217,13 +249,13 @@ class TeacherDataService {
     final String parentEmail = primaryParent?['email'] ?? json['parentEmail'] ?? '';
 
     final double attnPct = (json['attendancePercentage'] != null)
-        ? (double.tryParse(json['attendancePercentage'].toString()) ?? 92.0)
+        ? (double.tryParse(json['attendancePercentage'].toString()) ?? 0.0)
         : (json['attendancePercent'] != null
-            ? (double.tryParse(json['attendancePercent'].toString()) ?? 92.0)
-            : 92.0);
+            ? (double.tryParse(json['attendancePercent'].toString()) ?? 0.0)
+            : 0.0);
 
     final bool feeDefaulter = json['feeDefaulter'] == true || json['feeDue'] == true || json['hasDue'] == true;
-    final bool absentToday = json['absentToday'] == true || json['status'] == 'absent';
+    final bool absentToday = json['absentToday'] == true;
 
     return Student(
       id: id,
@@ -231,18 +263,77 @@ class TeacherDataService {
       rollNo: rollNo,
       enrollmentNo: enrollmentNo,
       studentClass: studentClass,
-      dateOfBirth: json['dob'] ?? (json['dateOfBirth']?.toString().split('T')[0] ?? '15-08-2015'),
-      gender: (json['gender'] as String?)?.toUpperCase() ?? 'Male',
-      parentName: parentName.isNotEmpty ? parentName : 'Parent',
+      dateOfBirth: json['dob'] ?? (json['dateOfBirth']?.toString().split('T')[0] ?? ''),
+      gender: (json['gender'] as String?)?.toUpperCase() ?? 'MALE',
+      parentName: parentName,
       parentMobile: parentMobile,
       parentEmail: parentEmail,
-      address: json['addressLine1'] ?? json['address'] ?? 'School Campus, Mumbai',
+      address: json['addressLine1'] ?? json['address'] ?? '',
       bloodGroup: json['bloodGroup'] ?? 'B+',
-      emergencyContact: parentMobile.isNotEmpty ? parentMobile : '+91 98765 00000',
+      emergencyContact: parentMobile.isNotEmpty ? parentMobile : (json['emergencyContact'] ?? ''),
       absentToday: absentToday,
       feeDefaulter: feeDefaulter,
       attendancePercentage: attnPct,
     );
+  }
+
+  // Fetch true attendance percentage per student for academic year from attendance-reporting
+  static Future<Map<String, double>> fetchStudentAttendancePercentages({
+    String? academicYearId,
+    String? classId,
+    String? sectionId,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final dateTo = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      final dateFrom = "${now.year - 1}-06-01"; // Academic year start window
+      final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${sectionId != null ? '&sectionId=$sectionId' : ''}&pageSize=100';
+
+      final response = await ApiService.get('/attendance-reporting/student-list$query');
+      final Map<String, double> map = {};
+      List? items;
+      if (response is Map && response['items'] is List) {
+        items = response['items'];
+      } else if (response is List) {
+        items = response;
+      }
+      if (items != null) {
+        for (var item in items) {
+          if (item is Map) {
+            final sId = item['studentId']?.toString() ?? item['id']?.toString();
+            final pct = item['attendancePercent'] ?? item['attendancePercentage'];
+            if (sId != null && pct != null) {
+              map[sId] = double.tryParse(pct.toString()) ?? 0.0;
+            }
+          }
+        }
+      }
+      return map;
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchStudentAttendancePercentages error: $e');
+      return {};
+    }
+  }
+
+  // Check and fetch today's attendance session records for section
+  static Future<Map<String, String>?> fetchTodayAttendanceRecords(String sectionId) async {
+    try {
+      final now = DateTime.now();
+      final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      final session = await fetchAttendanceSession(sectionId, dateStr);
+      if (session != null && session['records'] is List) {
+        final Map<String, String> recordMap = {};
+        for (var r in session['records']) {
+          if (r is Map && r['studentId'] != null) {
+            recordMap[r['studentId'].toString()] = (r['status']?.toString().toUpperCase() ?? 'P');
+          }
+        }
+        return recordMap;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchTodayAttendanceRecords error: $e');
+    }
+    return null;
   }
 
   // Mapper helper: API Broadcast JSON -> App Announcement model
@@ -252,11 +343,11 @@ class TeacherDataService {
     final String message = json['body'] ?? json['message'] ?? '';
     final String author = json['senderName'] ?? json['author'] ?? 'School Administration';
 
-    final String targetType = json['targetType']?.toString() ?? 'school';
+    final String targetType = (json['targetType'] ?? json['target_type'] ?? 'school').toString().toLowerCase();
     String scope = 'School';
-    if (targetType == 'staff_only') {
+    if (targetType == 'staff_only' || targetType == 'staff') {
       scope = 'Staff';
-    } else if (targetType == 'class' || targetType == 'section') {
+    } else if (targetType == 'class' || targetType == 'section' || targetType == 'custom') {
       scope = 'Class';
     }
 
@@ -280,6 +371,16 @@ class TeacherDataService {
         json['targetSectionName'] ??
         (targetType == 'class' || targetType == 'section' ? 'Class Notice' : null);
 
+    List<String>? attachments;
+    if (json['attachments'] is List) {
+      attachments = (json['attachments'] as List).map((a) {
+        if (a is Map) return (a['url'] ?? a['fileName'] ?? '').toString();
+        return a.toString();
+      }).where((s) => s.isNotEmpty).toList();
+    } else if (json['mediaUrls'] is List) {
+      attachments = (json['mediaUrls'] as List).map((m) => m.toString()).toList();
+    }
+
     return Announcement(
       id: id,
       title: title,
@@ -290,6 +391,8 @@ class TeacherDataService {
       date: date,
       time: time,
       scope: scope,
+      fullDate: json['createdAt']?.toString(),
+      attachments: attachments,
     );
   }
 }

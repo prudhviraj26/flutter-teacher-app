@@ -324,9 +324,13 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                 ? const Center(
                     child: CircularProgressIndicator(color: AppColors.secondary),
                   )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
-                    child: Column(
+                : RefreshIndicator(
+                    onRefresh: () async => _loadDataForSelectedMonth(),
+                    color: AppColors.secondary,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+                      child: Column(
                       children: [
                         // 4 Stats Chips: PRESENT (Green), LEAVE (Rose), HALF DAY (Orange), HOLIDAYS (Grey)
                         Row(
@@ -519,6 +523,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                       ],
                     ),
                   ),
+                ),
           ),
         ],
       ),

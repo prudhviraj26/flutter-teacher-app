@@ -4,8 +4,27 @@ import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
 
-class StaffNoticeScreen extends StatelessWidget {
+class StaffNoticeScreen extends StatefulWidget {
   const StaffNoticeScreen({super.key});
+
+  @override
+  State<StaffNoticeScreen> createState() => _StaffNoticeScreenState();
+}
+
+class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
+  bool _isFetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    if (mounted) setState(() => _isFetching = true);
+    await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    if (mounted) setState(() => _isFetching = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,9 +71,13 @@ class StaffNoticeScreen extends StatelessWidget {
           
           // Content
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
+            child: RefreshIndicator(
+              onRefresh: () => appState.refreshBroadcasts(),
+              color: AppColors.secondary,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                children: [
                 // Info Banner
                 Container(
                   decoration: BoxDecoration(
@@ -110,24 +133,31 @@ class StaffNoticeScreen extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 40),
                     alignment: Alignment.center,
-                    child: Column(
-                      children: [
-                        Icon(Icons.mark_email_read_outlined, size: 48, color: Colors.grey.shade400),
-                        const SizedBox(height: 12),
-                        Text(
-                          appState.language == 'mr'
-                              ? 'सध्या कोणतीही कर्मचारी सूचना नाही'
-                              : appState.language == 'hi'
-                                  ? 'वर्तमान में कोई स्टाफ नोटिस नहीं है'
-                                  : 'No staff circulars posted yet',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey.shade600,
+                    child: _isFetching
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: CircularProgressIndicator(color: AppColors.secondary),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              Icon(Icons.mark_email_read_outlined, size: 48, color: Colors.grey.shade400),
+                              const SizedBox(height: 12),
+                              Text(
+                                appState.language == 'mr'
+                                    ? 'सध्या कोणतीही कर्मचारी सूचना नाही'
+                                    : appState.language == 'hi'
+                                        ? 'वर्तमान में कोई स्टाफ नोटिस नहीं है'
+                                        : 'No staff circulars posted yet',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   )
                 else
                   ListView.builder(
@@ -283,6 +313,7 @@ class StaffNoticeScreen extends StatelessWidget {
               ],
             ),
           ),
+        ),
         ],
       ),
     );

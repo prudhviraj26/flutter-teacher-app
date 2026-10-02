@@ -14,6 +14,19 @@ class SchoolNoticeScreen extends StatefulWidget {
 
 class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
   String _searchTerm = '';
+  bool _isFetching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    if (mounted) setState(() => _isFetching = true);
+    await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    if (mounted) setState(() => _isFetching = false);
+  }
 
   String _formatDate(String dateStr, String language) {
     try {
@@ -106,145 +119,158 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
           
           // Notices list
           Expanded(
-            child: filteredNotices.isNotEmpty
-                ? ListView.builder(
-                    padding: const EdgeInsets.all(24),
-                    itemCount: filteredNotices.length,
-                    itemBuilder: (context, index) {
-                      final notice = filteredNotices[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x0A000000),
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
-                              )
-                            ],
-                          ),
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => SchoolNoticeDetailScreen(notice: notice),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.1),
-                                          shape: BoxShape.circle,
+            child: RefreshIndicator(
+              onRefresh: () => appState.refreshBroadcasts(),
+              color: AppColors.primary,
+              child: filteredNotices.isNotEmpty
+                  ? ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(24),
+                      itemCount: filteredNotices.length,
+                      itemBuilder: (context, index) {
+                        final notice = filteredNotices[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x0A000000),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => SchoolNoticeDetailScreen(notice: notice),
+                                  ),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 40,
+                                          height: 40,
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withOpacity(0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(Icons.campaign, color: AppColors.primary),
                                         ),
-                                        child: const Icon(Icons.campaign, color: AppColors.primary),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    notice.title,
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Color(0xFF1F2937),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      notice.title,
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFF1F2937),
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                     ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
                                                   ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  _formatDate(notice.date, appState.language),
-                                                  style: const TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.grey,
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    _formatDate(notice.date, appState.language),
+                                                    style: const TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors.grey,
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              notice.source,
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.primary,
-                                                fontWeight: FontWeight.bold,
+                                                ],
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                notice.source,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      notice.body,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade700,
+                                        height: 1.4,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Divider(color: Color(0xFFF9FAFB)),
+                                    const SizedBox(height: 4),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: Text(
+                                        appState.language == 'mr'
+                                            ? 'अधिक वाचा →'
+                                            : appState.language == 'hi'
+                                                ? 'और पढ़ें →'
+                                                : 'Read More →',
+                                        style: const TextStyle(
+                                          color: AppColors.primary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    notice.body,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                      height: 1.4,
                                     ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  const Divider(color: Color(0xFFF9FAFB)),
-                                  const SizedBox(height: 4),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      appState.language == 'mr'
-                                          ? 'अधिक वाचा →'
-                                          : appState.language == 'hi'
-                                              ? 'और पढ़ें →'
-                                              : 'Read More →',
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
+                        );
+                      },
+                    )
+                  : ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(height: MediaQuery.of(context).size.height * 0.25),
+                        Center(
+                          child: _isFetching
+                              ? const CircularProgressIndicator(color: AppColors.primary)
+                              : Text(
+                                  appState.language == 'mr'
+                                      ? 'कोणतीही सूचना सापडली नाही'
+                                      : appState.language == 'hi'
+                                          ? 'कोई नोटिस नहीं मिला'
+                                          : 'No notices found',
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
                         ),
-                      );
-                    },
-                  )
-                : Center(
-                    child: Text(
-                      appState.language == 'mr'
-                          ? 'कोणतीही सूचना सापडली नाही'
-                          : appState.language == 'hi'
-                              ? 'कोई नोटिस नहीं मिला'
-                              : 'No notices found',
-                      style: const TextStyle(color: Colors.grey),
+                      ],
                     ),
-                  ),
+            ),
           ),
         ],
       ),

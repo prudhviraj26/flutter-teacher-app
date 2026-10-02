@@ -145,6 +145,7 @@ class Notice {
   final String date;
   final String time;
   final String body;
+  final String? fullDate;
   final NoticeCta? cta;
 
   Notice({
@@ -154,8 +155,31 @@ class Notice {
     required this.date,
     required this.time,
     required this.body,
+    this.fullDate,
     this.cta,
   });
+
+  factory Notice.fromJson(Map<String, dynamic> json) {
+    return Notice(
+      id: json['id'] as String? ?? '',
+      source: json['source'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      time: json['time'] as String? ?? '',
+      body: json['body'] as String? ?? '',
+      fullDate: json['fullDate'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'source': source,
+    'title': title,
+    'date': date,
+    'time': time,
+    'body': body,
+    'fullDate': fullDate,
+  };
 }
 
 class NoticeCta {
@@ -174,7 +198,9 @@ class Announcement {
   final String? classScope; // mapped from 'class'
   final String date;
   final String time;
-  final String scope; // 'Class' | 'School'
+  final String scope; // 'Class' | 'School' | 'Staff'
+  final String? fullDate;
+  final List<String>? attachments;
 
   Announcement({
     required this.id,
@@ -186,6 +212,8 @@ class Announcement {
     required this.date,
     required this.time,
     required this.scope,
+    this.fullDate,
+    this.attachments,
   });
 }
 
@@ -197,6 +225,7 @@ class StaffNotice {
   final String date;
   final String time;
   final String category; // 'General' | 'Meeting' | 'Duty' | 'Urgent'
+  final String? fullDate;
 
   StaffNotice({
     required this.id,
@@ -206,7 +235,32 @@ class StaffNotice {
     required this.date,
     required this.time,
     required this.category,
+    this.fullDate,
   });
+
+  factory StaffNotice.fromJson(Map<String, dynamic> json) {
+    return StaffNotice(
+      id: json['id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      message: json['message'] as String? ?? '',
+      author: json['author'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      time: json['time'] as String? ?? '',
+      category: json['category'] as String? ?? 'General',
+      fullDate: json['fullDate'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'message': message,
+    'author': author,
+    'date': date,
+    'time': time,
+    'category': category,
+    'fullDate': fullDate,
+  };
 }
 
 class ClassUpdate {
@@ -272,8 +326,9 @@ class ClassUpdate {
 class AttendanceRecord {
   final String studentId;
   String status; // 'P' | 'A' | 'H' | 'W'
+  String? reason;
 
-  AttendanceRecord({required this.studentId, required this.status});
+  AttendanceRecord({required this.studentId, required this.status, this.reason});
 }
 
 class DailyAttendance {
@@ -400,6 +455,7 @@ class Holiday {
   final String date;
   final String day;
   final String month;
+  final String? year;
   final String title;
   final String type; // 'National' | 'Festival' | 'School'
   final String? fullDate; // 'YYYY-MM-DD'
@@ -410,6 +466,7 @@ class Holiday {
     required this.date,
     required this.day,
     required this.month,
+    this.year,
     required this.title,
     required this.type,
     this.fullDate,
@@ -430,6 +487,7 @@ class Holiday {
     final dStr = dt.day.toString().padLeft(2, '0');
     final mStr = months[dt.month - 1];
     final dayStr = days[dt.weekday - 1];
+    final yearStr = dt.year.toString();
     final fullDateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
 
     return Holiday(
@@ -437,6 +495,7 @@ class Holiday {
       date: dStr,
       day: dayStr,
       month: mStr,
+      year: yearStr,
       title: json['name'] ?? json['title'] ?? 'School Holiday',
       type: json['type'] ?? 'National',
       fullDate: fullDateStr,

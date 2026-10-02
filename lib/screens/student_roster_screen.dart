@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import 'attendance_screens.dart';
 
 class StudentRosterScreen extends StatefulWidget {
   const StudentRosterScreen({super.key});
@@ -21,9 +22,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<AppState>(context, listen: false);
-      if (appState.students.isEmpty) {
-        appState.loadLiveData();
-      }
+      appState.loadLiveData();
     });
   }
 
@@ -91,8 +90,10 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
 
     // Dynamic Filter counts
     final int allCount = classStudents.length;
-    final int absentCount = classStudents.where((s) => s.absentToday).length;
-    final int feesCount = classStudents.where((s) => s.feeDefaulter).length;
+    final int absentCount = appState.isAttendanceSubmittedToday
+        ? classStudents.where((s) => s.absentToday).length
+        : 0;
+    final int feesCount = 0;
     final int attendanceCount = classStudents.where((s) => s.attendancePercentage < 75).length;
 
     // Filtered list matching active tab & search query
@@ -104,10 +105,11 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
       if (!matchesSearch) return false;
 
       if (_activeFilter == 'absent') {
+        if (!appState.isAttendanceSubmittedToday) return false;
         return student.absentToday;
       }
       if (_activeFilter == 'fees') {
-        return student.feeDefaulter;
+        return false;
       }
       if (_activeFilter == 'attendance') {
         return student.attendancePercentage < 75;
@@ -237,31 +239,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
             ),
           ),
 
-          // Fees Notice Banner if fees tab is selected
-          if (_activeFilter == 'fees')
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF3E0),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFFFE0B2)),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.info_outline, size: 18, color: Color(0xFFEA580C)),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Fees tracking and due status is currently in development in the School Admin Portal.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFFC2410C), fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          // Student List / Directory
+          // Student List / Directory / Tab States
           Expanded(
             child: appState.isLoadingStudents
                 ? const Center(
@@ -272,177 +250,297 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                 : RefreshIndicator(
                     onRefresh: () => appState.loadLiveData(),
                     color: AppColors.secondary,
-                    child: filteredStudents.isNotEmpty
-                        ? ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                            itemCount: filteredStudents.length,
-                            itemBuilder: (context, index) {
-                              final s = filteredStudents[index];
-                              final isLowAttn = s.attendancePercentage < 75;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
+                    child: _activeFilter == 'fees'
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+                              Center(
                                 child: Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 24),
+                                  padding: const EdgeInsets.all(24),
                                   decoration: BoxDecoration(
                                     color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(20),
                                     boxShadow: const [
-                                      BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2))
+                                      BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 4))
                                     ],
                                   ),
-                                  child: InkWell(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => StudentProfileScreen(studentId: s.id),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 64,
+                                        height: 64,
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFF7ED),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: const Color(0xFFFFEDD5)),
                                         ),
-                                      );
-                                    },
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Row(
+                                        child: const Icon(Icons.account_balance_wallet_outlined, size: 32, color: Color(0xFFEA580C)),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'Fee Management In Development',
+                                        style: TextStyle(color: Color(0xFF1F2937), fontSize: 16, fontWeight: FontWeight.bold),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Fee dues, concession structures, and receipt tracking are currently being set up on the web admin portal and will be available soon.',
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.5),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : _activeFilter == 'absent' && !appState.isAttendanceSubmittedToday
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: [
+                                  SizedBox(height: MediaQuery.of(context).size.height * 0.12),
+                                  Center(
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 24),
+                                      padding: const EdgeInsets.all(24),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(20),
+                                        boxShadow: const [
+                                          BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 4))
+                                        ],
+                                      ),
+                                      child: Column(
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          // Roll / Initials Avatar
                                           Container(
-                                            width: 46,
-                                            height: 46,
+                                            width: 64,
+                                            height: 64,
                                             decoration: BoxDecoration(
-                                              color: s.absentToday
-                                                  ? const Color(0xFFFFEBEE)
-                                                  : AppColors.secondary.withOpacity(0.12),
+                                              color: const Color(0xFFFEF3C7),
                                               shape: BoxShape.circle,
+                                              border: Border.all(color: const Color(0xFFFDE68A)),
                                             ),
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              (s.rollNo.isNotEmpty && s.rollNo != '1')
-                                                  ? s.rollNo
-                                                  : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
-                                              style: TextStyle(
-                                                color: s.absentToday ? const Color(0xFFC62828) : AppColors.secondary,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
+                                            child: const Icon(Icons.pending_actions_outlined, size: 32, color: Color(0xFFD97706)),
+                                          ),
+                                          const SizedBox(height: 16),
+                                          const Text(
+                                            "Today's attendance is pending to be marked.",
+                                            style: TextStyle(color: Color(0xFF1F2937), fontSize: 16, fontWeight: FontWeight.bold),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            "Attendance for $_selectedClass has not been marked today. Mark attendance to view today's absent list.",
+                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.5),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                          const SizedBox(height: 20),
+                                          ElevatedButton.icon(
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(builder: (_) => const AttendanceRollCallScreen()),
+                                              ).then((_) {
+                                                if (mounted) appState.loadLiveData();
+                                              });
+                                            },
+                                            icon: const Icon(Icons.how_to_reg, color: Colors.white, size: 18),
+                                            label: const Text('Mark Attendance Now', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppColors.secondary,
+                                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                             ),
                                           ),
-                                          const SizedBox(width: 14),
-
-                                          // Student Info
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        s.name,
-                                                        style: const TextStyle(
-                                                          fontWeight: FontWeight.bold,
-                                                          fontSize: 14,
-                                                          color: Color(0xFF1F2937),
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                    // Attendance percentage chip
-                                                    Container(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                      decoration: BoxDecoration(
-                                                        color: isLowAttn ? const Color(0xFFFFEBEE) : const Color(0xFFE0F2F1),
-                                                        borderRadius: BorderRadius.circular(8),
-                                                      ),
-                                                      child: Text(
-                                                        '${s.attendancePercentage.toInt()}%',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: isLowAttn ? const Color(0xFFC62828) : const Color(0xFF00796B),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  '${s.studentClass} • GR: ${s.enrollmentNo}',
-                                                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
-                                                ),
-                                                const SizedBox(height: 6),
-
-                                                // Status tags row
-                                                Row(
-                                                  children: [
-                                                    if (s.absentToday)
-                                                      _buildStatusBadge('Absent Today', const Color(0xFFFFEBEE), const Color(0xFFC62828))
-                                                    else
-                                                      _buildStatusBadge('Present Today', const Color(0xFFE0F2F1), const Color(0xFF00796B)),
-                                                    const SizedBox(width: 6),
-                                                    if (s.parentName.isNotEmpty)
-                                                      Expanded(
-                                                        child: Text(
-                                                          'Parent: ${s.parentName}',
-                                                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
                                         ],
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          )
-                        : ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              SizedBox(height: MediaQuery.of(context).size.height * 0.15),
-                              Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 64,
-                                      height: 64,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        shape: BoxShape.circle,
+                                ],
+                              )
+                            : filteredStudents.isNotEmpty
+                                ? ListView.builder(
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                    itemCount: filteredStudents.length,
+                                    itemBuilder: (context, index) {
+                                      final s = filteredStudents[index];
+                                      final isLowAttn = s.attendancePercentage < 75;
+
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 10),
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(16),
+                                            boxShadow: const [
+                                              BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2))
+                                            ],
+                                          ),
+                                          child: InkWell(
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => StudentProfileScreen(studentId: s.id),
+                                                ),
+                                              );
+                                            },
+                                            borderRadius: BorderRadius.circular(16),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(16),
+                                              child: Row(
+                                                children: [
+                                                  // Roll / Initials Avatar
+                                                  Container(
+                                                    width: 46,
+                                                    height: 46,
+                                                    decoration: BoxDecoration(
+                                                      color: s.absentToday
+                                                          ? const Color(0xFFFFEBEE)
+                                                          : AppColors.secondary.withOpacity(0.12),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    alignment: Alignment.center,
+                                                    child: Text(
+                                                      (s.rollNo.isNotEmpty && s.rollNo != '1')
+                                                          ? s.rollNo
+                                                          : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
+                                                      style: TextStyle(
+                                                        color: s.absentToday ? const Color(0xFFC62828) : AppColors.secondary,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 14),
+
+                                                  // Student Info
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                                      children: [
+                                                        Row(
+                                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                          children: [
+                                                            Expanded(
+                                                              child: Text(
+                                                                s.name,
+                                                                style: const TextStyle(
+                                                                  fontWeight: FontWeight.bold,
+                                                                  fontSize: 14,
+                                                                  color: Color(0xFF1F2937),
+                                                                ),
+                                                                maxLines: 1,
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                            // Attendance percentage chip
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                              decoration: BoxDecoration(
+                                                                color: isLowAttn ? const Color(0xFFFFEBEE) : const Color(0xFFE0F2F1),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              child: Text(
+                                                                '${s.attendancePercentage.toInt()}%',
+                                                                style: TextStyle(
+                                                                  fontSize: 10,
+                                                                  fontWeight: FontWeight.bold,
+                                                                  color: isLowAttn ? const Color(0xFFC62828) : const Color(0xFF00796B),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(height: 2),
+                                                        Text(
+                                                          '${s.studentClass} • GR: ${s.enrollmentNo}',
+                                                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
+                                                        ),
+                                                        const SizedBox(height: 6),
+
+                                                        // Status tags row
+                                                        Row(
+                                                          children: [
+                                                            if (appState.isAttendanceSubmittedToday && s.absentToday)
+                                                              _buildStatusBadge('Absent Today', const Color(0xFFFFEBEE), const Color(0xFFC62828))
+                                                            else if (appState.isAttendanceSubmittedToday)
+                                                              _buildStatusBadge('Present Today', const Color(0xFFE0F2F1), const Color(0xFF00796B))
+                                                            else
+                                                              _buildStatusBadge('Attendance Pending', const Color(0xFFFEF3C7), const Color(0xFFD97706)),
+                                                            const SizedBox(width: 6),
+                                                            if (s.parentName.isNotEmpty)
+                                                              Expanded(
+                                                                child: Text(
+                                                                  'Parent: ${s.parentName}',
+                                                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                                                                  maxLines: 1,
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : ListView(
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    children: [
+                                      SizedBox(height: MediaQuery.of(context).size.height * 0.15),
+                                      Center(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Container(
+                                              width: 64,
+                                              height: 64,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade100,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                _activeFilter == 'attendance' ? Icons.verified_outlined : Icons.person_outline,
+                                                size: 32,
+                                                color: _activeFilter == 'attendance' ? const Color(0xFF16A34A) : Colors.grey,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              _activeFilter == 'absent'
+                                                  ? 'All students are present today!'
+                                                  : _activeFilter == 'attendance'
+                                                      ? 'No attendance defaulters'
+                                                      : 'No students found for this class',
+                                              style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14, fontWeight: FontWeight.bold),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              _activeFilter == 'absent'
+                                                  ? '100% attendance recorded for $_selectedClass today.'
+                                                  : _activeFilter == 'attendance'
+                                                      ? 'All students in this class have maintained 75%+ attendance.'
+                                                      : 'Try switching classes or adjusting search keywords.',
+                                              style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      child: const Icon(Icons.person_outline, size: 32, color: Colors.grey),
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _activeFilter == 'absent'
-                                          ? 'No students absent today'
-                                          : _activeFilter == 'attendance'
-                                              ? 'All students have 75%+ attendance'
-                                              : 'No students found for this class',
-                                      style: const TextStyle(color: Color(0xFF1F2937), fontSize: 14, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _activeFilter == 'absent'
-                                          ? 'Full attendance recorded for this section today!'
-                                          : 'Try switching classes or adjusting search keywords.',
-                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                                    ],
+                                  ),
                   ),
           ),
         ],

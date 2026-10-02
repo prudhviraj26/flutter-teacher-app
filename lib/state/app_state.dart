@@ -31,6 +31,7 @@ class AppState extends ChangeNotifier {
 
   // Active Attendance Marking Session
   Map<String, String> _tempAttendance = {}; // studentId -> status ('P' | 'A')
+  Map<String, String> _tempAttendanceReasons = {}; // studentId -> absent reason
 
   bool _isLoadingStudents = false;
   bool _isAttendanceSubmittedToday = false;
@@ -72,11 +73,11 @@ class AppState extends ChangeNotifier {
   List<ExamResult> get examResults => _examResults;
 
   Map<String, String> get tempAttendance => _tempAttendance;
+  Map<String, String> get tempAttendanceReasons => _tempAttendanceReasons;
 
   // Constructor
   AppState() {
     _initPreferences();
-    _initMockData();
   }
 
   // Init Shared Preferences
@@ -101,11 +102,10 @@ class AppState extends ChangeNotifier {
       }
     }
     
-    // Load profile pic
-    if (_teacher != null) {
-      _profilePic = _prefs?.getString('teacher_avatar_${_teacher!.employeeId}');
-    }
-    
+    // Load cached notices and class updates immediately on startup
+    await _loadCachedNotices();
+    await _loadClassUpdates();
+
     notifyListeners();
 
     if (_loggedIn) {
@@ -180,20 +180,27 @@ class AppState extends ChangeNotifier {
         // Fallback to fetch all students in school if section filter returns empty
         liveStudents = await TeacherDataService.fetchStudents();
       }
-      if (liveStudents.isNotEmpty) {
-        _students = liveStudents;
-      } else {
-        if (_students.isEmpty) {
-          _initMockData();
+      _students = liveStudents;
+
+      // Fetch live attendance percentages for academic year from attendance reporting
+      try {
+        final attPercentages = await TeacherDataService.fetchStudentAttendancePercentages(
+          sectionId: teacherSectionId,
+        );
+        if (attPercentages.isNotEmpty) {
+          _students = _students.map((s) {
+            if (attPercentages.containsKey(s.id)) {
+              return s.copyWith(attendancePercentage: attPercentages[s.id]);
+            }
+            return s;
+          }).toList();
         }
-        final teacherClass = _teacher?.assignedClass ?? 'Grade 10 A';
-        _students = _students.map((s) {
-          if (s.studentClass.isEmpty || s.studentClass == 'Class' || s.studentClass == 'Grade 3-B') {
-            return s.copyWith(studentClass: teacherClass);
-          }
-          return s;
-        }).toList();
+      } catch (attErr) {
+        debugPrint("Error fetching student attendance percentages: $attErr");
       }
+
+      // Check today's attendance session from backend
+      await fetchTodayAttendanceSession();
 
       // Fetch live subject assignments if current subjects are empty or default to General
       if (_teacher != null && (_teacher!.subjects.isEmpty || _teacher!.subjects.contains('General'))) {
@@ -229,41 +236,8 @@ class AppState extends ChangeNotifier {
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
       }
 
-      final liveAnnouncements = await TeacherDataService.fetchBroadcasts();
-
-      // 1. Staff Notices: Strictly broadcasts with scope == 'Staff' (staff_only)
-      final staffList = liveAnnouncements.where((a) => a.scope == 'Staff').toList();
-      _staffNotices = staffList.map((a) => StaffNotice(
-        id: a.id,
-        title: a.title,
-        message: a.message,
-        author: a.author,
-        date: a.date,
-        time: a.time,
-        category: 'Meeting',
-      )).toList();
-
-      // 2. School Notices: Strictly official school-wide broadcasts (school)
-      final schoolList = liveAnnouncements.where((a) => a.scope == 'School').toList();
-      _notices = schoolList.map((a) => Notice(
-        id: a.id,
-        source: a.author,
-        title: a.title,
-        body: a.message,
-        date: a.date,
-        time: a.time,
-      )).toList();
-
-      // 3. Announcements: Class updates, section bulletins, or announcements composed by the teacher
-      final classList = liveAnnouncements.where((a) =>
-        a.scope == 'Class' || a.scope == 'Direct' || a.authorId == _teacher?.id
-      ).toList();
-      _announcements = classList.isNotEmpty ? classList : schoolList;
-
-      // Clear mock lists from demo school for authenticated API session
-      _parentConversations = [];
+      await refreshBroadcasts();
       await _loadClassUpdates();
-
       initTempAttendance();
 
       // Fetch school holidays from web admin portal
@@ -457,10 +431,182 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add Announcement
-  void addAnnouncement(Announcement ann) {
+  // Academic Year Check Helper (2026-04-01 to 2027-03-31)
+  bool _isWithinCurrentAcademicYear(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return true;
+    try {
+      final dt = DateTime.parse(dateStr);
+      final ayStart = DateTime(2026, 4, 1);
+      final ayEnd = DateTime(2027, 3, 31, 23, 59, 59);
+      return dt.isAfter(ayStart.subtract(const Duration(seconds: 1))) &&
+             dt.isBefore(ayEnd.add(const Duration(seconds: 1)));
+    } catch (_) {
+      return true;
+    }
+  }
+
+  // Refresh and sort all broadcasts by timestamp within Academic Year
+  Future<void> _loadCachedNotices() async {
+    final teacherId = _teacher?.id ?? 'default';
+    try {
+      final staffStored = _prefs?.getString('veyho_teacher_staff_notices_$teacherId');
+      if (staffStored != null && staffStored.isNotEmpty) {
+        final List<dynamic> list = json.decode(staffStored);
+        _staffNotices = list.map((item) => StaffNotice.fromJson(item as Map<String, dynamic>)).toList();
+      }
+      final schoolStored = _prefs?.getString('veyho_teacher_school_notices_$teacherId');
+      if (schoolStored != null && schoolStored.isNotEmpty) {
+        final List<dynamic> list = json.decode(schoolStored);
+        _notices = list.map((item) => Notice.fromJson(item as Map<String, dynamic>)).toList();
+      }
+    } catch (e) {
+      debugPrint("Error loading cached notices: $e");
+    }
+  }
+
+  Future<void> _saveCachedNotices() async {
+    final teacherId = _teacher?.id ?? 'default';
+    try {
+      final staffJson = _staffNotices.map((n) => n.toJson()).toList();
+      await _prefs?.setString('veyho_teacher_staff_notices_$teacherId', json.encode(staffJson));
+
+      final schoolJson = _notices.map((n) => n.toJson()).toList();
+      await _prefs?.setString('veyho_teacher_school_notices_$teacherId', json.encode(schoolJson));
+    } catch (e) {
+      debugPrint("Error saving cached notices: $e");
+    }
+  }
+
+  // Refresh and sort all broadcasts by timestamp within Academic Year
+  Future<void> refreshBroadcasts() async {
+    try {
+      final liveAnnouncements = await TeacherDataService.fetchBroadcasts();
+      if (liveAnnouncements.isEmpty) {
+        // Keep existing cached notices if API returned empty/failed
+        return;
+      }
+
+      final ayAnnouncements = liveAnnouncements
+          .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
+          .toList();
+
+      // Sort newest first by fullDate/date
+      ayAnnouncements.sort((a, b) {
+        final aDt = a.fullDate ?? a.date;
+        final bDt = b.fullDate ?? b.date;
+        return bDt.compareTo(aDt);
+      });
+
+      // 1. Staff Notices: Strictly broadcasts with scope == 'Staff' (staff_only)
+      final staffList = ayAnnouncements.where((a) => a.scope == 'Staff').toList();
+      _staffNotices = staffList.map((a) => StaffNotice(
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        author: a.author,
+        date: a.date,
+        time: a.time,
+        fullDate: a.fullDate,
+        category: 'Meeting',
+      )).toList();
+
+      // 2. School Notices: Strictly official school-wide broadcasts (school)
+      final schoolList = ayAnnouncements.where((a) => a.scope == 'School').toList();
+      _notices = schoolList.map((a) => Notice(
+        id: a.id,
+        source: a.author,
+        title: a.title,
+        body: a.message,
+        date: a.date,
+        time: a.time,
+        fullDate: a.fullDate,
+      )).toList();
+
+      // 3. Class Announcements:
+      // Filter out any communications sent via Class Update module (Classwork and Homework)
+      // and only include:
+      // - Announcements composed by the teacher himself/herself
+      // - Announcements sent by the Admin via webadmin portal targeted to this teacher's class/section
+      final classList = ayAnnouncements.where((a) {
+        // Exclude staff and school wide general notices
+        if (a.scope == 'Staff' || a.scope == 'School') {
+          return false;
+        }
+
+        final titleLower = a.title.toLowerCase().trim();
+        // Strict exclusion of Classwork and Homework
+        if (titleLower.startsWith('[classwork]') ||
+            titleLower.startsWith('[homework]') ||
+            titleLower.startsWith('classwork:') ||
+            titleLower.startsWith('homework:')) {
+          return false;
+        }
+
+        // Check if composed by this teacher
+        final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+            (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+
+        if (isAuthoredByTeacher) {
+          return true;
+        }
+
+        // Check if sent by Admin / School targeted to this teacher's class/section
+        if (a.scope == 'Class' || a.scope == 'Direct') {
+          final teacherClasses = <String>[];
+          if (_teacher?.assignedClass != null && _teacher!.assignedClass!.isNotEmpty) {
+            teacherClasses.add(_teacher!.assignedClass!.toLowerCase());
+          }
+          if (_teacher?.assignedClasses != null) {
+            for (var c in _teacher!.assignedClasses!) {
+              if (c.isNotEmpty) teacherClasses.add(c.toLowerCase());
+            }
+          }
+
+          if (teacherClasses.isEmpty || a.classScope == null || a.classScope!.isEmpty) {
+            return true;
+          }
+
+          final targetClassLower = a.classScope!.toLowerCase();
+          final isMatch = teacherClasses.any((tc) =>
+              targetClassLower.contains(tc) ||
+              tc.contains(targetClassLower) ||
+              targetClassLower.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').contains(tc.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) ||
+              tc.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').contains(targetClassLower.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) ||
+              targetClassLower == 'class notice');
+          return isMatch;
+        }
+
+        return false;
+      }).toList();
+      _announcements = classList;
+
+      await _saveCachedNotices();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error refreshing broadcasts: $e");
+    }
+  }
+
+  // Add Class Announcement with live API Sync to Web Admin Sent Items
+  Future<void> addAnnouncement(Announcement ann) async {
     _announcements.insert(0, ann);
     notifyListeners();
+
+    if (_loggedIn) {
+      try {
+        final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
+        await TeacherDataService.createBroadcast(
+          title: ann.title,
+          message: ann.message,
+          targetType: hasSection ? 'section' : 'school',
+          targetSectionId: hasSection ? _teacher!.sectionId : null,
+          attachments: ann.attachments,
+        );
+        refreshBroadcasts();
+      } catch (e) {
+        debugPrint("Error syncing announcement to API: $e");
+      }
+    }
   }
 
   // Delete Announcement
@@ -470,18 +616,40 @@ class AppState extends ChangeNotifier {
   }
 
   // Class Updates Storage Helpers
+  Future<void> refreshClassUpdates() async {
+    await _loadClassUpdates();
+    notifyListeners();
+  }
+
+  // Refresh Holidays from API
+  Future<void> refreshHolidays() async {
+    try {
+      final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
+      if (liveHolidays.isNotEmpty) {
+        _holidays = liveHolidays;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error refreshing holidays: $e");
+    }
+  }
+
   Future<void> _loadClassUpdates() async {
     final teacherId = _teacher?.id ?? 'default';
     final stored = _prefs?.getString('veyho_teacher_class_updates_$teacherId');
     if (stored != null && stored.isNotEmpty) {
       try {
         final List<dynamic> list = json.decode(stored);
-        _classUpdates = list.map((item) => ClassUpdate.fromJson(item as Map<String, dynamic>)).toList();
+        final parsed = list.map((item) => ClassUpdate.fromJson(item as Map<String, dynamic>)).toList();
+        _classUpdates = parsed.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
+        // Sort newest first
+        _classUpdates.sort((a, b) => b.date.compareTo(a.date));
         return;
       } catch (e) {
         debugPrint("Error loading class updates from storage: $e");
       }
     }
+    _classUpdates = [];
   }
 
   Future<void> _saveClassUpdates() async {
@@ -494,11 +662,28 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Add Class Update
-  void addClassUpdate(ClassUpdate update) {
+  // Add Class Update with live API Sync to Web Admin Sent Items
+  Future<void> addClassUpdate(ClassUpdate update) async {
     _classUpdates.insert(0, update);
     _saveClassUpdates();
     notifyListeners();
+
+    if (_loggedIn) {
+      try {
+        final broadcastTitle = "[${update.type}] ${update.subject}: ${update.title}";
+        final broadcastBody = "${update.description}${update.dueDate != null ? '\n\nDue Date: ${update.dueDate}' : ''}";
+        final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
+        await TeacherDataService.createBroadcast(
+          title: broadcastTitle,
+          message: broadcastBody,
+          targetType: hasSection ? 'section' : 'school',
+          targetSectionId: hasSection ? _teacher!.sectionId : null,
+          attachments: update.attachments,
+        );
+      } catch (e) {
+        debugPrint("Error syncing class update to API: $e");
+      }
+    }
   }
 
   // Delete Class Update
@@ -617,6 +802,7 @@ class AppState extends ChangeNotifier {
   void initTempAttendance() {
     final validIds = _students.map((s) => s.id).toSet();
     _tempAttendance.removeWhere((key, value) => !validIds.contains(key));
+    _tempAttendanceReasons.removeWhere((key, value) => !validIds.contains(key));
     for (var s in _students) {
       if (!_tempAttendance.containsKey(s.id)) {
         _tempAttendance[s.id] = 'P';
@@ -626,6 +812,14 @@ class AppState extends ChangeNotifier {
 
   void updateTempAttendance(String studentId, String status) {
     _tempAttendance[studentId] = status;
+    if (status == 'P') {
+      _tempAttendanceReasons.remove(studentId);
+    }
+    notifyListeners();
+  }
+
+  void updateTempAttendanceReason(String studentId, String reason) {
+    _tempAttendanceReasons[studentId] = reason;
     notifyListeners();
   }
 
@@ -643,6 +837,7 @@ class AppState extends ChangeNotifier {
         final List? sessionStudents = sessionData['students'] as List?;
         if (sessionStudents != null) {
           final Map<String, String> fetchedTemp = {};
+          final Map<String, String> fetchedReasons = {};
           final List<AttendanceRecord> records = [];
 
           for (var item in sessionStudents) {
@@ -650,23 +845,29 @@ class AppState extends ChangeNotifier {
               final studentId = item['studentId'] as String?;
               final currentRecord = item['currentRecord'] as Map<String, dynamic>?;
               final statusStr = currentRecord?['status'] as String?;
+              final reasonStr = currentRecord?['reason'] as String?;
 
               if (studentId != null) {
                 final isAbsent = statusStr?.toLowerCase() == 'absent';
                 final status = isAbsent ? 'A' : 'P';
                 fetchedTemp[studentId] = status;
 
+                if (isAbsent && reasonStr != null && reasonStr.isNotEmpty) {
+                  fetchedReasons[studentId] = reasonStr;
+                }
+
                 final idx = _students.indexWhere((s) => s.id == studentId);
                 if (idx != -1) {
                   _students[idx].absentToday = isAbsent;
                 }
-                records.add(AttendanceRecord(studentId: studentId, status: status));
+                records.add(AttendanceRecord(studentId: studentId, status: status, reason: isAbsent ? reasonStr : null));
               }
             }
           }
 
           if (fetchedTemp.isNotEmpty) {
             _tempAttendance = fetchedTemp;
+            _tempAttendanceReasons = fetchedReasons;
           }
 
           final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
@@ -690,11 +891,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? _lastAttendanceError;
+  String? get lastAttendanceError => _lastAttendanceError;
+
   Future<bool> submitAttendance(String teacherId) async {
     _isSubmittingAttendance = true;
+    _lastAttendanceError = null;
     notifyListeners();
 
     final String? sectionId = _teacher?.sectionId;
+    if (sectionId == null || sectionId.isEmpty) {
+      _lastAttendanceError = 'No assigned section found for your teacher profile.';
+      _isSubmittingAttendance = false;
+      notifyListeners();
+      return false;
+    }
+
+    if (_students.isEmpty) {
+      _lastAttendanceError = 'No students found in your section roster.';
+      _isSubmittingAttendance = false;
+      notifyListeners();
+      return false;
+    }
+
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
 
@@ -704,24 +923,30 @@ class AppState extends ChangeNotifier {
     // Strictly build records from current section students list only
     for (var s in _students) {
       final status = _tempAttendance[s.id] ?? 'P';
-      apiRecords.add({
+      final reason = (_tempAttendanceReasons[s.id] ?? '').trim();
+      final Map<String, String> recordMap = {
         'studentId': s.id,
         'status': status == 'P' ? 'present' : 'absent',
-      });
-      localRecords.add(AttendanceRecord(studentId: s.id, status: status));
+      };
+      if (status == 'A' && reason.isNotEmpty) {
+        recordMap['reason'] = reason;
+      }
+      apiRecords.add(recordMap);
+      localRecords.add(AttendanceRecord(
+        studentId: s.id,
+        status: status,
+        reason: status == 'A' && reason.isNotEmpty ? reason : null,
+      ));
       s.absentToday = (status == 'A');
     }
 
-    bool success = true;
-    if (sectionId != null && sectionId.isNotEmpty) {
-      success = await TeacherDataService.submitAttendance(
-        sectionId: sectionId,
-        date: dateStr,
-        records: apiRecords,
-      );
-    }
+    final String? error = await TeacherDataService.submitAttendance(
+      sectionId: sectionId,
+      date: dateStr,
+      records: apiRecords,
+    );
 
-    if (success) {
+    if (error == null) {
       _isAttendanceSubmittedToday = true;
       final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
@@ -730,17 +955,21 @@ class AppState extends ChangeNotifier {
         0,
         DailyAttendance(
           date: dateStr,
-          classTarget: _teacher?.assignedClass ?? 'Nursery A',
+          classTarget: _teacher?.assignedClass ?? 'Grade 10 A',
           records: localRecords,
           submittedBy: teacherId,
           submittedAt: "$dateStr $timeStr",
         ),
       );
+      _isSubmittingAttendance = false;
+      notifyListeners();
+      return true;
+    } else {
+      _lastAttendanceError = error;
+      _isSubmittingAttendance = false;
+      notifyListeners();
+      return false;
     }
-
-    _isSubmittingAttendance = false;
-    notifyListeners();
-    return success;
   }
 
   // Parent chats operations
@@ -799,266 +1028,6 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       }
     }
-  }
-
-  // Load static lists matching mockData.ts
-  void _initMockData() {
-    final defaultClass = _teacher?.assignedClass ?? 'Grade 10 A';
-    // 1. Students list
-    _students = [
-      Student(id: 'S001', name: 'Aarav Sharma', rollNo: '1', enrollmentNo: 'VIS2021001', studentClass: defaultClass, dateOfBirth: '15-08-2017', gender: 'Male', parentName: 'Rajesh Sharma', parentMobile: '+91 98765 43210', address: 'Flat 302, Sunrise Apartments, Bandra West, Mumbai - 400050', bloodGroup: 'O+', emergencyContact: '+91 98765 99999', absentToday: false, feeDefaulter: false, attendancePercentage: 96),
-      Student(id: 'S002', name: 'Aisha Khan', rollNo: '2', enrollmentNo: 'VIS2021002', studentClass: defaultClass, dateOfBirth: '22-03-2017', gender: 'Female', parentName: 'Imran Khan', parentMobile: '+91 98765 43211', address: 'B-104, Green Valley, Andheri East, Mumbai - 400069', bloodGroup: 'A+', emergencyContact: '+91 98765 99998', absentToday: false, feeDefaulter: true, attendancePercentage: 92),
-      Student(id: 'S003', name: 'Aryan Patil', rollNo: '3', enrollmentNo: 'VIS2021003', studentClass: defaultClass, dateOfBirth: '10-11-2017', gender: 'Male', parentName: 'Suresh Patil', parentMobile: '+91 98765 43212', address: '15/A, Sai Krupa, Dadar West, Mumbai - 400028', bloodGroup: 'B+', emergencyContact: '+91 98765 99997', absentToday: true, feeDefaulter: false, attendancePercentage: 95),
-      Student(id: 'S004', name: 'Diya Deshmukh', rollNo: '4', enrollmentNo: 'VIS2021004', studentClass: defaultClass, dateOfBirth: '05-07-2017', gender: 'Female', parentName: 'Pradeep Deshmukh', parentMobile: '+91 98765 43213', address: 'Plot 42, Shivaji Nagar, Pune - 411016', bloodGroup: 'AB+', emergencyContact: '+91 98765 99996', absentToday: false, feeDefaulter: false, attendancePercentage: 98),
-      Student(id: 'S005', name: 'Ishaan Joshi', rollNo: '5', enrollmentNo: 'VIS2021005', studentClass: defaultClass, dateOfBirth: '18-01-2018', gender: 'Male', parentName: 'Amit Joshi', parentMobile: '+91 98765 43214', address: '7th Floor, Tower B, Orchid Heights, Powai, Mumbai - 400076', bloodGroup: 'O+', emergencyContact: '+91 98765 99995', absentToday: false, feeDefaulter: false, attendancePercentage: 72),
-      Student(id: 'S006', name: 'Kavya Menon', rollNo: '6', enrollmentNo: 'VIS2021006', studentClass: defaultClass, dateOfBirth: '29-09-2017', gender: 'Female', parentName: 'Vinod Menon', parentMobile: '+91 98765 43215', address: 'C-201, Marina Heights, Juhu, Mumbai - 400049', bloodGroup: 'A+', emergencyContact: '+91 98765 99994', absentToday: false, feeDefaulter: false, attendancePercentage: 94),
-      Student(id: 'S007', name: 'Lakshmi Nair', rollNo: '7', enrollmentNo: 'VIS2021007', studentClass: defaultClass, dateOfBirth: '12-04-2017', gender: 'Female', parentName: 'Ramesh Nair', parentMobile: '+91 98765 43216', address: 'House No. 88, Sector 7, Vashi, Navi Mumbai - 400703', bloodGroup: 'B+', emergencyContact: '+91 98765 99993', absentToday: true, feeDefaulter: false, attendancePercentage: 91),
-      Student(id: 'S008', name: 'Rohan Kapoor', rollNo: '8', enrollmentNo: 'VIS2021008', studentClass: defaultClass, dateOfBirth: '03-06-2017', gender: 'Male', parentName: 'Sanjay Kapoor', parentMobile: '+91 98765 43217', address: '12-B, Shanti Niwas, Colaba, Mumbai - 400005', bloodGroup: 'O-', emergencyContact: '+91 98765 99992', absentToday: false, feeDefaulter: true, attendancePercentage: 93),
-      Student(id: 'S009', name: 'Saanvi Reddy', rollNo: '9', enrollmentNo: 'VIS2021009', studentClass: defaultClass, dateOfBirth: '25-12-2017', gender: 'Female', parentName: 'Krishna Reddy', parentMobile: '+91 98765 43218', address: 'Flat 501, Lakeview Apartments, Banjara Hills, Hyderabad - 500034', bloodGroup: 'A-', emergencyContact: '+91 98765 99991', absentToday: false, feeDefaulter: false, attendancePercentage: 68),
-      Student(id: 'S010', name: 'Vihaan Singh', rollNo: '10', enrollmentNo: 'VIS2021010', studentClass: defaultClass, dateOfBirth: '14-02-2018', gender: 'Male', parentName: 'Vikram Singh', parentMobile: '+91 98765 43219', address: 'Villa 23, Palm Grove Society, Thane West, Mumbai - 400601', bloodGroup: 'AB-', emergencyContact: '+91 98765 99990', absentToday: false, feeDefaulter: false, attendancePercentage: 97),
-    ];
-
-    // 2. Announcements list
-    _announcements = [
-      Announcement(id: 'A001', title: 'Parent-Teacher Meeting', message: 'Dear Parents, We are organizing a Parent-Teacher Meeting on May 15, 2026 at 10:00 AM for Grade 3-B. Please make sure to attend and discuss your child\'s progress.', author: 'Mrs. Priya Patel', authorId: 'T001', classScope: 'Grade 3-B', date: '2026-05-10', time: '09:00 AM', scope: 'Class'),
-      Announcement(id: 'A002', title: 'Mathematics Quiz Next Week', message: 'Students should prepare for the Mathematics quiz on multiplication tables (2-10). The quiz will be held on May 18, 2026.', author: 'Mrs. Priya Patel', authorId: 'T001', classScope: 'Grade 3-B', date: '2026-05-08', time: '02:30 PM', scope: 'Class'),
-      Announcement(id: 'A003', title: 'Annual Sports Day', message: 'Annual Sports Day will be held on May 20, 2026. All students are required to participate. Parents are cordially invited to attend.', author: 'Principal Office', authorId: 'ADMIN', date: '2026-05-05', time: '10:00 AM', scope: 'School'),
-    ];
-
-    // 3. Class Updates
-    _classUpdates = [
-      ClassUpdate(id: 'CU001', type: 'Homework', title: 'Multiplication Tables Practice', description: 'Complete exercises 1-10 from Chapter 5: Multiplication Tables. Show all working steps. Due on May 12, 2026.', subject: 'Mathematics', classTarget: 'Grade 3-B', teacherId: 'T001', teacherName: 'Mrs. Priya Patel', dueDate: '2026-05-12', attachments: ['worksheet_multiplication.pdf'], date: '2026-05-08'),
-      ClassUpdate(id: 'CU002', type: 'Classwork', title: 'Parts of a Plant', description: 'Today we learned about different parts of a plant - roots, stem, leaves, flowers, and fruits. Students participated in a hands-on activity to identify plant parts.', subject: 'Science', classTarget: 'Grade 3-B', teacherId: 'T001', teacherName: 'Mrs. Priya Patel', date: '2026-05-07'),
-      ClassUpdate(id: 'CU003', type: 'Homework', title: 'Essay Writing - My Family', description: 'Write a short essay (100 words) about your family. Include information about family members and what you like to do together.', subject: 'English', classTarget: 'Grade 3-B', teacherId: 'T002', teacherName: 'Mr. Arjun Desai', dueDate: '2026-05-10', date: '2026-05-06'),
-    ];
-
-    // 4. Attendance History
-    _attendanceHistory = [
-      DailyAttendance(
-        date: '2026-05-16',
-        classTarget: 'Grade 3-B',
-        records: [
-          AttendanceRecord(studentId: 'S001', status: 'P'),
-          AttendanceRecord(studentId: 'S002', status: 'P'),
-          AttendanceRecord(studentId: 'S003', status: 'A'),
-          AttendanceRecord(studentId: 'S004', status: 'P'),
-          AttendanceRecord(studentId: 'S005', status: 'P'),
-          AttendanceRecord(studentId: 'S006', status: 'P'),
-          AttendanceRecord(studentId: 'S007', status: 'P'),
-          AttendanceRecord(studentId: 'S008', status: 'P'),
-          AttendanceRecord(studentId: 'S009', status: 'P'),
-          AttendanceRecord(studentId: 'S010', status: 'A'),
-        ],
-        submittedBy: 'T001',
-        submittedAt: '2026-05-16 09:30 AM',
-      ),
-      DailyAttendance(
-        date: '2026-05-15',
-        classTarget: 'Grade 3-B',
-        records: [
-          AttendanceRecord(studentId: 'S001', status: 'P'),
-          AttendanceRecord(studentId: 'S002', status: 'P'),
-          AttendanceRecord(studentId: 'S003', status: 'P'),
-          AttendanceRecord(studentId: 'S004', status: 'P'),
-          AttendanceRecord(studentId: 'S005', status: 'A'),
-          AttendanceRecord(studentId: 'S006', status: 'P'),
-          AttendanceRecord(studentId: 'S007', status: 'P'),
-          AttendanceRecord(studentId: 'S008', status: 'P'),
-          AttendanceRecord(studentId: 'S009', status: 'P'),
-          AttendanceRecord(studentId: 'S010', status: 'P'),
-        ],
-        submittedBy: 'T001',
-        submittedAt: '2026-05-15 09:25 AM',
-      ),
-    ];
-
-    // 5. Parent Conversations
-    _parentConversations = [
-      ParentConversation(
-        parentId: 'P004',
-        parentName: 'Mrs. Patil',
-        studentName: 'Riya Patil',
-        studentClass: 'Class 8A',
-        mobile: '+91 98765 44001',
-        lastMessage: 'Received, thank you!',
-        timeLabel: '10 mins',
-        unread: true,
-        messages: [
-          ParentMessage(id: 'M101', text: 'Good morning, can Riya get extra notes for the Maths chapter? She was unwell last week.', sender: 'parent', timestamp: '9:02 AM'),
-          ParentMessage(id: 'M102', text: 'Good morning Mrs. Patil. Of course, I\'ll share the notes today.', sender: 'teacher', timestamp: '9:15 AM'),
-          ParentMessage(id: 'M103', text: 'Thank you so much. Really appreciate it.', sender: 'parent', timestamp: '9:17 AM'),
-          ParentMessage(id: 'M104', text: 'Notes attached below.', sender: 'teacher', timestamp: '9:45 AM'),
-          ParentMessage(id: 'M105', text: 'Chapter4_notes.pdf', sender: 'teacher', timestamp: '9:45 AM', isAttachment: true, attachmentName: 'Chapter4_notes.pdf'),
-          ParentMessage(id: 'M106', text: 'Received, thank you!', sender: 'parent', timestamp: '9:48 AM'),
-          ParentMessage(id: 'M107', text: 'Please let me know if she needs help with Science as well.', sender: 'teacher', timestamp: '9:50 AM', failed: true),
-        ],
-      ),
-      ParentConversation(parentId: 'P005', parentName: 'Mr. Kulkarni', studentName: 'Arjun Kulkarni', studentClass: 'Grade 3-B', mobile: '+91 98765 44002', lastMessage: 'Thank you for the update on his progress', timeLabel: 'Yesterday', unread: true, messages: [
-        ParentMessage(id: 'M108', text: 'Thank you for the update on his progress', sender: 'parent', timestamp: 'Yesterday')
-      ]),
-      ParentConversation(parentId: 'P006', parentName: 'Mrs. Mehta', studentName: 'Sneha Mehta', studentClass: 'Grade 3-B', mobile: '+91 98765 44003', lastMessage: 'She will be absent tomorrow due to...', timeLabel: '2 days ago', unread: false, messages: [
-        ParentMessage(id: 'M109', text: 'She will be absent tomorrow due to...', sender: 'parent', timestamp: '2 days ago')
-      ]),
-      ParentConversation(parentId: 'P007', parentName: 'Mr. Desai', studentName: 'Aarav Desai', studentClass: 'Grade 3-B', mobile: '+91 98765 44004', lastMessage: 'Please share the syllabus for term 2', timeLabel: '3 days ago', unread: false, messages: [
-        ParentMessage(id: 'M110', text: 'Please share the syllabus for term 2', sender: 'parent', timestamp: '3 days ago')
-      ]),
-      ParentConversation(
-        parentId: 'P001',
-        parentName: 'Rajesh Sharma',
-        studentName: 'Aarav Sharma',
-        studentClass: 'Grade 3-B',
-        mobile: '+91 98765 43210',
-        lastMessage: 'Thank you for the update!',
-        timeLabel: '4 days ago',
-        unread: false,
-        messages: [
-          ParentMessage(id: 'M001', text: 'Good morning! Aarav has shown great improvement in Mathematics this month.', sender: 'teacher', timestamp: '10:30 AM'),
-          ParentMessage(id: 'M002', text: 'That\'s wonderful to hear! Thank you for your guidance.', sender: 'parent', timestamp: '11:00 AM'),
-          ParentMessage(id: 'M003', text: 'He scored 95% in the last test. Keep encouraging him to practice regularly.', sender: 'teacher', timestamp: '11:15 AM'),
-          ParentMessage(id: 'M004', text: 'Thank you for the update!', sender: 'parent', timestamp: '11:30 AM'),
-        ],
-      ),
-      ParentConversation(
-        parentId: 'P002',
-        parentName: 'Imran Khan',
-        studentName: 'Aisha Khan',
-        studentClass: 'Grade 3-B',
-        mobile: '+91 98765 43211',
-        lastMessage: 'Will make sure she completes it.',
-        timeLabel: '5 days ago',
-        unread: false,
-        messages: [
-          ParentMessage(id: 'M005', text: 'Hello, Aisha has not submitted her Science homework from last week.', sender: 'teacher', timestamp: '02:00 PM'),
-          ParentMessage(id: 'M006', text: 'I\'m sorry about that. I will make sure she completes it today.', sender: 'parent', timestamp: '02:30 PM'),
-          ParentMessage(id: 'M007', text: 'Thank you. Please submit it by tomorrow.', sender: 'teacher', timestamp: '03:00 PM'),
-          ParentMessage(id: 'M008', text: 'Will make sure she completes it.', sender: 'parent', timestamp: '03:15 PM'),
-        ],
-      ),
-      ParentConversation(
-        parentId: 'P003',
-        parentName: 'Suresh Patil',
-        studentName: 'Aryan Patil',
-        studentClass: 'Grade 3-B',
-        mobile: '+91 98765 43212',
-        lastMessage: 'Glad to hear that!',
-        timeLabel: '6 days ago',
-        unread: false,
-        messages: [
-          ParentMessage(id: 'M009', text: 'Aryan participated excellently in the class discussion today.', sender: 'teacher', timestamp: '04:00 PM'),
-          ParentMessage(id: 'M010', text: 'Glad to hear that!', sender: 'parent', timestamp: '04:30 PM'),
-        ],
-      ),
-    ];
-
-    // 6. Duties list
-    _duties = [
-      Duty(id: 'D001', date: '2026-05-18', type: 'Morning Assembly', time: '7:45 AM - 8:15 AM', location: 'School Playground', notes: 'Supervise student assembly and ensure discipline'),
-      Duty(id: 'D002', date: '2026-05-18', type: 'Recess Duty', time: '11:00 AM - 11:30 AM', location: 'Playground & Canteen Area', notes: 'Monitor students during break time'),
-      Duty(id: 'D003', date: '2026-05-20', type: 'Sports Day Coordination', time: '8:00 AM - 4:00 PM', location: 'School Sports Ground', notes: 'Coordinate Grade 3 athletics events'),
-      Duty(id: 'D004', date: '2026-05-25', type: 'Parent-Teacher Meeting', time: '10:00 AM - 2:00 PM', location: 'Classroom 3-B', notes: 'Meet parents and discuss student progress'),
-    ];
-
-    // 7. Staff Notices
-    _staffNotices = [
-      StaffNotice(id: 'SN001', title: 'General Staff Meeting Scheduled', message: 'Dear Teachers, There will be a mandatory General Staff Meeting in the main auditorium tomorrow at 3:00 PM. We will review curriculum timelines and coordinate the upcoming final exams. Please bring your class syllabus logs.', author: 'Principal Office', date: '2026-05-23', time: '10:30 AM', category: 'Meeting'),
-      StaffNotice(id: 'SN002', title: 'Revision of Summer Vacation Schedule', message: 'Dear Staff Members, Please note that the Summer Vacation schedule for teachers has been updated due to calendar alignment. The new holiday period begins on June 1, 2026 and reopens on June 30, 2026.', author: 'School Management', date: '2026-05-21', time: '04:15 PM', category: 'Urgent'),
-      StaffNotice(id: 'SN003', title: 'Guidelines for Invigilator Duty', message: 'All invigilators are requested to collect exam packets at least 20 minutes before schedule. No mobile phones are allowed inside the exam halls. Report any discrepancies directly to the exam control room.', author: 'Exam Coordinator', date: '2026-05-18', time: '09:00 AM', category: 'Duty'),
-    ];
-
-    // 8. Notices
-    _notices = [
-      Notice(
-        id: '1',
-        source: 'Principal Office',
-        title: 'Parent-Teacher Meeting',
-        date: '2026-05-15',
-        time: '10:00 AM',
-        body: 'Dear Parents, We are organizing a Parent-Teacher Meeting on May 15, 2026 at 10:00 AM. Please make sure to attend and discuss your child\'s progress with their teachers.',
-        cta: NoticeCta(label: 'View Event', action: 'event'),
-      ),
-      Notice(
-        id: '2',
-        source: 'Accounts Department',
-        title: 'Fee Payment Reminder',
-        date: '2026-05-10',
-        time: '09:00 AM',
-        body: 'This is a reminder to pay the pending school fees before the due date. Late payment will attract a fine of ₹100 per day.',
-        cta: NoticeCta(label: 'View Fees', action: 'fees'),
-      ),
-      Notice(
-        id: '3',
-        source: 'Sports Department',
-        title: 'Annual Sports Day',
-        date: '2026-05-20',
-        time: '08:00 AM',
-        body: 'Annual Sports Day will be held on May 20, 2026. All students are required to participate. Parents are cordially invited to attend.',
-      ),
-      Notice(
-        id: '4',
-        source: 'Administration',
-        title: 'Summer Vacation Notice',
-        date: '2026-05-25',
-        time: '12:00 PM',
-        body: 'School will be closed for summer vacation from June 1 to June 30, 2026. School will reopen on July 1, 2026.',
-      ),
-    ];
-
-    // 9. Events
-    _events = [
-      Event(id: '1', title: 'Parent-Teacher Meeting', date: '2026-05-15', time: '10:00 AM - 2:00 PM', location: 'School Auditorium', description: 'Quarterly Parent-Teacher Meeting to discuss student progress and academic performance.'),
-      Event(id: '2', title: 'Annual Sports Day', date: '2026-05-20', time: '8:00 AM - 4:00 PM', location: 'School Sports Ground', description: 'Annual Sports Day with various athletic events and competitions. All students to participate.'),
-    ];
-
-    // 10. Albums
-    _albums = [
-      Album(
-        id: '1',
-        title: 'Annual Day 2026',
-        coverPhoto: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=500',
-        photoCount: 24,
-        photos: List.generate(24, (i) => Photo(id: '${i + 1}', url: 'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=500')),
-      ),
-      Album(
-        id: '2',
-        title: 'Sports Day 2025',
-        coverPhoto: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=500',
-        photoCount: 18,
-        photos: List.generate(18, (i) => Photo(id: '${i + 1}', url: 'https://images.unsplash.com/photo-1517649763962-0c623066013b?w=500')),
-      ),
-      Album(
-        id: '3',
-        title: 'Independence Day Celebration',
-        coverPhoto: 'https://images.unsplash.com/photo-1532375810709-75b1da00537c?w=500',
-        photoCount: 15,
-        photos: List.generate(15, (i) => Photo(id: '${i + 1}', url: 'https://images.unsplash.com/photo-1532375810709-75b1da00537c?w=500')),
-      ),
-    ];
-
-    // 11. Holidays (Comprehensive list matching Admin Portal 2026-27 schedule)
-    _holidays = [
-      Holiday(id: '1', date: '14', month: 'Jan', day: 'Wednesday', title: 'Makar Sankranti / Pongal', type: 'Festival', fullDate: '2026-01-14'),
-      Holiday(id: '2', date: '26', month: 'Jan', day: 'Monday', title: 'Republic Day', type: 'National', fullDate: '2026-01-26'),
-      Holiday(id: '3', date: '15', month: 'Feb', day: 'Sunday', title: 'Maha Shivratri', type: 'Festival', fullDate: '2026-02-15'),
-      Holiday(id: '4', date: '03', month: 'Mar', day: 'Tuesday', title: 'Holi', type: 'Festival', fullDate: '2026-03-03'),
-      Holiday(id: '5', date: '21', month: 'Mar', day: 'Saturday', title: 'Id-ul-Fitr (Ramzan Eid)', type: 'Festival', fullDate: '2026-03-21'),
-      Holiday(id: '6', date: '31', month: 'Mar', day: 'Tuesday', title: 'Mahavir Jayanti', type: 'Festival', fullDate: '2026-03-31'),
-      Holiday(id: '7', date: '03', month: 'Apr', day: 'Friday', title: 'Good Friday', type: 'National', fullDate: '2026-04-03'),
-      Holiday(id: '8', date: '14', month: 'Apr', day: 'Tuesday', title: 'Ambedkar Jayanti', type: 'National', fullDate: '2026-04-14'),
-      Holiday(id: '9', date: '01', month: 'May', day: 'Friday', title: 'Labour Day / Maharashtra Day', type: 'National', fullDate: '2026-05-01'),
-      Holiday(id: '10', date: '28', month: 'May', day: 'Thursday', title: 'Bakrid (Eid-ul-Adha)', type: 'Festival', fullDate: '2026-05-28'),
-      Holiday(id: '11', date: '26', month: 'Jun', day: 'Friday', title: 'Muharram', type: 'Festival', fullDate: '2026-06-26'),
-      Holiday(id: '12', date: '15', month: 'Aug', day: 'Saturday', title: 'Independence Day', type: 'National', fullDate: '2026-08-15'),
-      Holiday(id: '13', date: '26', month: 'Aug', day: 'Wednesday', title: 'Milad-un-Nabi (Id-e-Milad)', type: 'Festival', fullDate: '2026-08-26'),
-      Holiday(id: '14', date: '28', month: 'Aug', day: 'Friday', title: 'Raksha Bandhan', type: 'Festival', fullDate: '2026-08-28'),
-      Holiday(id: '15', date: '02', month: 'Oct', day: 'Friday', title: 'Gandhi Jayanti', type: 'National', fullDate: '2026-10-02'),
-      Holiday(id: '16', date: '20', month: 'Oct', day: 'Tuesday', title: 'Dussehra', type: 'Festival', fullDate: '2026-10-20'),
-      Holiday(id: '17', date: '08', month: 'Nov', day: 'Sunday', title: 'Diwali', type: 'Festival', fullDate: '2026-11-08'),
-      Holiday(id: '18', date: '24', month: 'Nov', day: 'Tuesday', title: 'Guru Nanak Jayanti', type: 'Festival', fullDate: '2026-11-24'),
-      Holiday(id: '19', date: '25', month: 'Dec', day: 'Friday', title: 'Christmas', type: 'National', fullDate: '2026-12-25'),
-    ];
-
-    // 12. Exam results
-    _examResults = [];
   }
 
   // Check if today is a registered holiday or weekend

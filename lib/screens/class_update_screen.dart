@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import '../services/attachment_helper.dart';
 
 class ClassUpdateScreen extends StatefulWidget {
   const ClassUpdateScreen({super.key});
@@ -18,8 +19,16 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   String _subject = '';
   final TextEditingController _descriptionController = TextEditingController();
   String _filterType = 'All'; // 'All' | 'Homework' | 'Classwork'
-  String? _attachedFile = 'Chapter5_reference.pdf';
+  String? _attachedFile;
   bool _failedToPost = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AppState>(context, listen: false).refreshClassUpdates();
+    });
+  }
 
   @override
   void dispose() {
@@ -27,11 +36,34 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
     super.dispose();
   }
 
-  void _simulateAttachment(String fileName) {
-    setState(() {
-      _attachedFile = fileName;
-    });
-    _showSnackBar("Attached: $fileName", AppColors.success);
+  Future<void> _handlePickCamera() async {
+    final result = await AttachmentHelper.pickFromCamera();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
+  }
+
+  Future<void> _handlePickGallery() async {
+    final result = await AttachmentHelper.pickFromGallery();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
+  }
+
+  Future<void> _handlePickFileManager() async {
+    final result = await AttachmentHelper.pickFromFileManager();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
   }
 
   void _showSnackBar(String message, Color color) {
@@ -104,7 +136,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
     setState(() {
       _classSection = '';
       _subject = '';
-      _attachedFile = 'Chapter5_reference.pdf';
+      _attachedFile = null;
       _showPostForm = false;
       _failedToPost = false;
     });
@@ -139,7 +171,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       }
     }
     if (availableClasses.isEmpty) {
-      availableClasses.addAll(['Grade 3-B', 'Class 7A', 'Class 8A']);
+      availableClasses.addAll(['Grade 10 A', 'Grade 10 B']);
     }
 
     final List<String> availableSubjects = [];
@@ -247,9 +279,13 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
           
           // Content Scroll
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
+            child: RefreshIndicator(
+              onRefresh: () => appState.refreshClassUpdates(),
+              color: AppColors.primary,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                children: [
                 // Post Form
                 if (_showPostForm) ...[
                   Container(
@@ -439,11 +475,11 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            _buildAttachButton(Icons.camera_alt_outlined, 'Camera', () => _simulateAttachment('photo_captured.jpg')),
+                            _buildAttachButton(Icons.camera_alt_outlined, 'Camera', _handlePickCamera),
                             const SizedBox(width: 8),
-                            _buildAttachButton(Icons.image_outlined, 'Gallery', () => _simulateAttachment('gallery_attached.png')),
+                            _buildAttachButton(Icons.image_outlined, 'Gallery', _handlePickGallery),
                             const SizedBox(width: 8),
-                            _buildAttachButton(Icons.folder_open_outlined, 'File Manager', () => _simulateAttachment('reference_doc.pdf')),
+                            _buildAttachButton(Icons.folder_open_outlined, 'File Manager', _handlePickFileManager),
                           ],
                         ),
                         
@@ -461,7 +497,10 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.picture_as_pdf, color: Colors.red),
+                                    Icon(
+                                      AttachmentHelper.getFileIcon(_attachedFile!),
+                                      color: AttachmentHelper.getFileColor(_attachedFile!),
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(_attachedFile!, style: const TextStyle(fontSize: 12)),
                                   ],
@@ -716,6 +755,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
               ],
             ),
           ),
+        ),
         ],
       ),
     );
@@ -932,10 +972,13 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: themeColor.withOpacity(0.1),
+                                  color: AttachmentHelper.getFileColor(attachment).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Icon(Icons.insert_drive_file, color: themeColor),
+                                child: Icon(
+                                  AttachmentHelper.getFileIcon(attachment),
+                                  color: AttachmentHelper.getFileColor(attachment),
+                                ),
                               ),
                               title: Text(
                                 attachment,

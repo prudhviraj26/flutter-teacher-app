@@ -5,8 +5,21 @@ import '../constants/colors.dart';
 import '../models/models.dart';
 
 // 1. HOLIDAYS SCREEN
-class HolidaysScreen extends StatelessWidget {
+class HolidaysScreen extends StatefulWidget {
   const HolidaysScreen({super.key});
+
+  @override
+  State<HolidaysScreen> createState() => _HolidaysScreenState();
+}
+
+class _HolidaysScreenState extends State<HolidaysScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AppState>(context, listen: false).refreshHolidays();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,16 +56,41 @@ class HolidaysScreen extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.35),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Text(
+                    '2026-27',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
           
           // List
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(24),
-              itemCount: holidays.length,
-              itemBuilder: (context, index) {
+            child: RefreshIndicator(
+              onRefresh: () => appState.refreshHolidays(),
+              color: AppColors.primary,
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                itemCount: holidays.length,
+                itemBuilder: (context, index) {
                 final h = holidays[index];
                 
                 Color badgeBg = Colors.grey.shade100;
@@ -67,6 +105,10 @@ class HolidaysScreen extends StatelessWidget {
                   badgeBg = AppColors.primary.withOpacity(0.1);
                   badgeText = AppColors.primary;
                 }
+
+                final displayDayYear = (h.year != null && h.year!.isNotEmpty)
+                    ? "${h.day} • ${h.year}"
+                    : h.day;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
@@ -130,8 +172,12 @@ class HolidaysScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                h.day,
-                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                displayDayYear,
+                                style: TextStyle(
+                                  fontSize: 11, 
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
@@ -153,10 +199,11 @@ class HolidaysScreen extends StatelessWidget {
               },
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }
 
 // 2. EVENTS SCREEN

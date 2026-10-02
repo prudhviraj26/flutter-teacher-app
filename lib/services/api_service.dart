@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -11,6 +12,8 @@ class ApiService {
   static const _storage = FlutterSecureStorage();
   static const String _tokenKey = 'veyho_access_token';
   static const String _refreshTokenKey = 'veyho_refresh_token';
+
+  static bool _isRefreshing = false;
 
   // Save Token
   static Future<void> saveTokens({required String accessToken, String? refreshToken}) async {
@@ -25,10 +28,57 @@ class ApiService {
     return await _storage.read(key: _tokenKey);
   }
 
+  // Get Refresh Token
+  static Future<String?> getRefreshToken() async {
+    return await _storage.read(key: _refreshTokenKey);
+  }
+
   // Clear Tokens
   static Future<void> clearTokens() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshTokenKey);
+  }
+
+  // Silent Token Renewal
+  static Future<bool> refreshTokenSilently() async {
+    if (_isRefreshing) return false;
+    _isRefreshing = true;
+
+    try {
+      final refreshToken = await getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        _isRefreshing = false;
+        return false;
+      }
+
+      final url = Uri.parse('$baseUrl/auth/refresh');
+      final res = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'x-refresh-token': refreshToken,
+        },
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        final body = jsonDecode(res.body);
+        if (body is Map<String, dynamic> && body['accessToken'] != null) {
+          final newAccess = body['accessToken'] as String;
+          final newRefresh = body['refreshToken'] as String?;
+          await saveTokens(accessToken: newAccess, refreshToken: newRefresh);
+          debugPrint('Silent token refresh succeeded');
+          _isRefreshing = false;
+          return true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Silent token refresh failed: $e');
+    } finally {
+      _isRefreshing = false;
+    }
+    return false;
   }
 
   // Headers Helper
@@ -48,21 +98,32 @@ class ApiService {
     return headers;
   }
 
-  // GET Request
-  static Future<dynamic> get(String endpoint, {bool requireAuth = true}) async {
+  // GET Request with Auto-Token Refresh Retry
+  static Future<dynamic> get(String endpoint, {bool requireAuth = true, bool isRetry = false}) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
 
     try {
       final response = await http.get(url, headers: headers);
+      if (response.statusCode == 401 && requireAuth && !isRetry) {
+        final refreshed = await refreshTokenSilently();
+        if (refreshed) {
+          return await get(endpoint, requireAuth: requireAuth, isRetry: true);
+        }
+      }
       return _processResponse(response);
     } catch (e) {
       throw Exception('Network error: $e');
     }
   }
 
-  // POST Request
-  static Future<dynamic> post(String endpoint, Map<String, dynamic> body, {bool requireAuth = true}) async {
+  // POST Request with Auto-Token Refresh Retry
+  static Future<dynamic> post(
+    String endpoint,
+    Map<String, dynamic> body, {
+    bool requireAuth = true,
+    bool isRetry = false,
+  }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
 
@@ -72,14 +133,25 @@ class ApiService {
         headers: headers,
         body: jsonEncode(body),
       );
+      if (response.statusCode == 401 && requireAuth && !isRetry) {
+        final refreshed = await refreshTokenSilently();
+        if (refreshed) {
+          return await post(endpoint, body, requireAuth: requireAuth, isRetry: true);
+        }
+      }
       return _processResponse(response);
     } catch (e) {
       throw Exception('Network error: $e');
     }
   }
 
-  // PATCH Request
-  static Future<dynamic> patch(String endpoint, Map<String, dynamic> body, {bool requireAuth = true}) async {
+  // PATCH Request with Auto-Token Refresh Retry
+  static Future<dynamic> patch(
+    String endpoint,
+    Map<String, dynamic> body, {
+    bool requireAuth = true,
+    bool isRetry = false,
+  }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await _getHeaders(requireAuth: requireAuth);
 
@@ -89,6 +161,12 @@ class ApiService {
         headers: headers,
         body: jsonEncode(body),
       );
+      if (response.statusCode == 401 && requireAuth && !isRetry) {
+        final refreshed = await refreshTokenSilently();
+        if (refreshed) {
+          return await patch(endpoint, body, requireAuth: requireAuth, isRetry: true);
+        }
+      }
       return _processResponse(response);
     } catch (e) {
       throw Exception('Network error: $e');

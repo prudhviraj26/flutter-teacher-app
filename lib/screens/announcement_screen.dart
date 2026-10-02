@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import '../services/attachment_helper.dart';
 
 class AnnouncementScreen extends StatefulWidget {
   const AnnouncementScreen({super.key});
@@ -19,17 +20,48 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   String? _attachedFile;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    });
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _messageController.dispose();
     super.dispose();
   }
 
-  void _simulateAttachment(String fileName) {
-    setState(() {
-      _attachedFile = fileName;
-    });
-    _showSnackBar("Attached: $fileName", AppColors.success);
+  Future<void> _handlePickCamera() async {
+    final result = await AttachmentHelper.pickFromCamera();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
+  }
+
+  Future<void> _handlePickGallery() async {
+    final result = await AttachmentHelper.pickFromGallery();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
+  }
+
+  Future<void> _handlePickFileManager() async {
+    final result = await AttachmentHelper.pickFromFileManager();
+    if (result != null) {
+      setState(() {
+        _attachedFile = result.name;
+      });
+      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    }
   }
 
   void _showSnackBar(String message, Color color) {
@@ -72,7 +104,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
 
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+    final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
     final newAnn = Announcement(
       id: "A${now.millisecondsSinceEpoch}",
@@ -80,10 +112,12 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       message: message,
       author: appState.teacher?.name ?? "Teacher",
       authorId: appState.teacher?.id ?? "T001",
-      classScope: appState.teacher?.assignedClass ?? "Grade 3-B",
+      classScope: appState.teacher?.assignedClass ?? "Grade 10 A",
       date: dateStr,
       time: timeStr,
       scope: 'Class',
+      fullDate: now.toIso8601String(),
+      attachments: _attachedFile != null ? [_attachedFile!] : null,
     );
 
     appState.addAnnouncement(newAnn);
@@ -115,7 +149,6 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
-    final isClassTeacher = teacher?.designation == 'Class Teacher';
     final list = appState.announcements;
 
     return Scaffold(
@@ -144,7 +177,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      appState.translate('announcement'),
+                      appState.translate('classAnnouncement'),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -153,75 +186,37 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     ),
                   ],
                 ),
-                if (isClassTeacher)
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _showPostForm = !_showPostForm;
-                      });
-                    },
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(_showPostForm ? Icons.close : Icons.plus_one, color: Colors.white),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _showPostForm = !_showPostForm;
+                    });
+                  },
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
                     ),
+                    child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
                   ),
+                ),
               ],
             ),
           ),
           
           // Content
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(24),
-              children: [
-                // Subject Teacher alert
-                if (!isClassTeacher)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEF3C7),
-                      border: Border.all(color: const Color(0xFFFDE68A)),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.error_outline, color: Color(0xFFD97706), size: 22),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                appState.translate('subjectTeacherNote'),
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF78350F),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                appState.translate('contactClassTeacher'),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFFB45309),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                
+            child: RefreshIndicator(
+              onRefresh: () => appState.refreshBroadcasts(),
+              color: AppColors.secondary,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                children: [
                 // Form Post
-                if (_showPostForm && isClassTeacher) ...[
+                if (_showPostForm) ...[
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -276,17 +271,17 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                             border: Border.all(color: const Color(0xFFE5E7EB)),
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          child: const Row(
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.people_outline, size: 14, color: Colors.grey),
-                              SizedBox(width: 6),
+                              const Icon(Icons.people_outline, size: 14, color: Colors.grey),
+                              const SizedBox(width: 6),
                               Text(
-                                'Class 8A — All Parents',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
+                                '${teacher?.assignedClass ?? "Grade 10 A"} — Class Parents',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                               ),
-                              SizedBox(width: 4),
-                              Icon(Icons.lock_outline, size: 12, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.lock_outline, size: 12, color: Colors.grey),
                             ],
                           ),
                         ),
@@ -335,16 +330,16 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            _buildAttachButton(Icons.camera_alt_outlined, 'Camera', () => _simulateAttachment('captured_photo.jpg')),
+                            _buildAttachButton(Icons.camera_alt_outlined, 'Camera', _handlePickCamera),
                             const SizedBox(width: 8),
-                            _buildAttachButton(Icons.image_outlined, 'Gallery', () => _simulateAttachment('gallery_image.png')),
+                            _buildAttachButton(Icons.image_outlined, 'Gallery', _handlePickGallery),
                             const SizedBox(width: 8),
-                            _buildAttachButton(Icons.folder_open_outlined, 'File Manager', () => _simulateAttachment('reference_doc.pdf')),
+                            _buildAttachButton(Icons.folder_open_outlined, 'File Manager', _handlePickFileManager),
                           ],
                         ),
                         
                         if (_attachedFile != null) ...[
-                          const SizedBox(height: 16),
+                           const SizedBox(height: 16),
                           Container(
                             decoration: BoxDecoration(
                               color: const Color(0xFFF9FAFB),
@@ -357,7 +352,10 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.picture_as_pdf, color: Colors.red),
+                                    Icon(
+                                      AttachmentHelper.getFileIcon(_attachedFile!),
+                                      color: AttachmentHelper.getFileColor(_attachedFile!),
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(_attachedFile!, style: const TextStyle(fontSize: 12)),
                                   ],
@@ -427,8 +425,71 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                   const SizedBox(height: 16),
                 ],
                 
+                // Empty state
+                if (list.isEmpty && !_showPostForm) ...[
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary.withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.campaign_outlined, size: 32, color: AppColors.secondary),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No Class Announcements Yet',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Tap the + button at the top to publish an announcement, activity notice, or competition details to ${teacher?.assignedClass ?? "your class"}.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _showPostForm = true;
+                            });
+                          },
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('Post Announcement', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.secondary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Active list
-                ListView.builder(
+                if (list.isNotEmpty)
+                  ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: list.length,
@@ -527,20 +588,45 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                                 ),
                                 if (item.scope == 'Class' && item.classScope != null) ...[
                                   const SizedBox(height: 12),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: iconBg,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    child: Text(
-                                      item.classScope!,
-                                      style: TextStyle(
-                                        color: iconColor,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: iconBg,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        child: Text(
+                                          item.classScope!,
+                                          style: TextStyle(
+                                            color: iconColor,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      if (item.attachments != null && item.attachments!.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFF3F4F6),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.attach_file, size: 12, color: Colors.grey.shade700),
+                                              const SizedBox(width: 2),
+                                              Text(
+                                                '${item.attachments!.length}',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ],
                               ],
@@ -554,6 +640,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
               ],
             ),
           ),
+        ),
         ],
       ),
     );
@@ -760,6 +847,59 @@ class AnnouncementDetailScreen extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      ),
+                    ],
+
+                    // Attachments Section
+                    if (announcement.attachments != null && announcement.attachments!.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Attachments',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Column(
+                        children: announcement.attachments!.map((att) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF5F7FA),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: ListTile(
+                              leading: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: AttachmentHelper.getFileColor(att).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  AttachmentHelper.getFileIcon(att),
+                                  color: AttachmentHelper.getFileColor(att),
+                                ),
+                              ),
+                              title: Text(
+                                att,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1F2937),
+                                ),
+                              ),
+                              onTap: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Opening $att...')),
+                                );
+                              },
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ],
                   ],
