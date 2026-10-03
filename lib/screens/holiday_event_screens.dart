@@ -41,7 +41,7 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -60,10 +60,10 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: Colors.white.withOpacity(0.35),
+                      color: Colors.white.withValues(alpha: 0.35),
                       width: 1,
                     ),
                   ),
@@ -99,10 +99,10 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
                   badgeBg = Colors.green.shade50;
                   badgeText = Colors.green.shade700;
                 } else if (h.type == 'Festival') {
-                  badgeBg = AppColors.secondary.withOpacity(0.1);
+                  badgeBg = AppColors.secondary.withValues(alpha: 0.1);
                   badgeText = AppColors.secondary;
                 } else if (h.type == 'School') {
-                  badgeBg = AppColors.primary.withOpacity(0.1);
+                  badgeBg = AppColors.primary.withValues(alpha: 0.1);
                   badgeText = AppColors.primary;
                 }
 
@@ -128,7 +128,7 @@ class _HolidaysScreenState extends State<HolidaysScreen> {
                           width: 54,
                           height: 54,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
+                            color: AppColors.primary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
@@ -230,7 +230,7 @@ class EventsScreen extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -287,7 +287,7 @@ class EventsScreen extends StatelessWidget {
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: badgeColor.withOpacity(0.1),
+                                color: badgeColor.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(Icons.event, color: badgeColor),
@@ -396,7 +396,7 @@ class EventDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [themeColor, themeColor.withOpacity(0.8)],
+                          colors: [themeColor, themeColor.withValues(alpha: 0.8)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -474,7 +474,7 @@ class GalleryScreen extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -532,7 +532,7 @@ class GalleryScreen extends StatelessWidget {
                         Expanded(
                           child: Container(
                             decoration: BoxDecoration(
-                              color: AppColors.secondary.withOpacity(0.1),
+                              color: AppColors.secondary.withValues(alpha: 0.1),
                               borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
                               image: DecorationImage(
                                 image: NetworkImage(a.coverPhoto),
@@ -600,7 +600,7 @@ class AlbumDetailScreen extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),

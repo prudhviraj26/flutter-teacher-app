@@ -244,7 +244,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -265,7 +265,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                             Text(
                               appState.currentSchoolName,
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.85),
+                                color: Colors.white.withValues(alpha: 0.85),
                                 fontSize: 12,
                               ),
                             ),
@@ -278,9 +278,9 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withOpacity(0.3)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         currentClass,
@@ -299,7 +299,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.12),
+                    color: Colors.black.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
@@ -324,7 +324,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                         decoration: BoxDecoration(
                           color: isHolidayToday
                               ? const Color(0xFFFDE68A)
-                              : Colors.white.withOpacity(0.25),
+                              : Colors.white.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -741,7 +741,7 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -761,7 +761,7 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -812,7 +812,7 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
+                              color: AppColors.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -1201,7 +1201,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -1221,7 +1221,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(

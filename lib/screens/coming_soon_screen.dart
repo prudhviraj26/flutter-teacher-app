@@ -41,7 +41,7 @@ class ComingSoonScreen extends StatelessWidget {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -79,7 +79,7 @@ class ComingSoonScreen extends StatelessWidget {
                             width: 96,
                             height: 96,
                             decoration: BoxDecoration(
-                              color: themeColor.withOpacity(0.1),
+                              color: themeColor.withValues(alpha: 0.1),
                               shape: BoxShape.circle,
                             ),
                             child: Center(
@@ -105,7 +105,7 @@ class ComingSoonScreen extends StatelessWidget {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFFA41B).withOpacity(0.4),
+                                  color: const Color(0xFFFFA41B).withValues(alpha: 0.4),
                                   blurRadius: 12,
                                   spreadRadius: 2,
                                   offset: const Offset(0, 4),
@@ -158,7 +158,7 @@ class ComingSoonScreen extends StatelessWidget {
                                 )
                               ],
                               border: Border.all(
-                                color: const Color(0xFFE5E7EB).withOpacity(0.5),
+                                color: const Color(0xFFE5E7EB).withValues(alpha: 0.5),
                               ),
                             ),
                             padding: const EdgeInsets.all(24),
@@ -203,7 +203,7 @@ class ComingSoonScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   elevation: 4,
-                  shadowColor: themeColor.withOpacity(0.4),
+                  shadowColor: themeColor.withValues(alpha: 0.4),
                 ),
                 child: Text(
                   appState.translate('goBackToDashboard'),

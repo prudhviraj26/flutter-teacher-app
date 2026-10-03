@@ -46,7 +46,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -168,7 +168,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                     final notice = notices[index];
                     final isUnread = !appState.isNoticeRead(notice.id);
                     final isTeal = index % 2 == 0;
-                    final iconBg = isTeal ? AppColors.primary.withOpacity(0.1) : AppColors.secondary.withOpacity(0.1);
+                    final iconBg = isTeal ? AppColors.primary.withValues(alpha: 0.1) : AppColors.secondary.withValues(alpha: 0.1);
                     final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
 
                     return Padding(
@@ -178,7 +178,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isUnread ? iconColor.withOpacity(0.5) : const Color(0xFFF3F4F6),
+                            color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
                             width: isUnread ? 1.5 : 1.0,
                           ),
                           boxShadow: const [
@@ -420,7 +420,7 @@ class StaffNoticeDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [themeColor, themeColor.withOpacity(0.8)],
+                          colors: [themeColor, themeColor.withValues(alpha: 0.8)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -457,7 +457,7 @@ class StaffNoticeDetailScreen extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             notice.author,
-                            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
                           ),
                           const SizedBox(height: 8),
                           Row(

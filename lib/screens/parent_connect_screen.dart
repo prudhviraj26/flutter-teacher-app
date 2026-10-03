@@ -137,7 +137,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: AppColors.secondary.withOpacity(0.1),
+                                            color: AppColors.secondary.withValues(alpha: 0.1),
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
@@ -236,7 +236,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -266,7 +266,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                       width: 96,
                       height: 96,
                       decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
+                        color: AppColors.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -361,7 +361,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -428,7 +428,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                 color: isHighlight ? const Color(0xFFFFFBEB) : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isHighlight ? AppColors.secondary.withOpacity(0.2) : Colors.transparent,
+                                  color: isHighlight ? AppColors.secondary.withValues(alpha: 0.2) : Colors.transparent,
                                 ),
                                 boxShadow: const [
                                   BoxShadow(
@@ -454,7 +454,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                             width: 48,
                                             height: 48,
                                             decoration: BoxDecoration(
-                                              color: AppColors.secondary.withOpacity(0.1),
+                                              color: AppColors.secondary.withValues(alpha: 0.1),
                                               shape: BoxShape.circle,
                                             ),
                                             alignment: Alignment.center,
@@ -565,7 +565,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                                     width: 30,
                                                     height: 30,
                                                     decoration: BoxDecoration(
-                                                      color: AppColors.secondary.withOpacity(0.1),
+                                                      color: AppColors.secondary.withValues(alpha: 0.1),
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: const Icon(Icons.phone, size: 14, color: AppColors.secondary),
@@ -621,7 +621,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                 elevation: 6,
-                shadowColor: AppColors.secondary.withOpacity(0.4),
+                shadowColor: AppColors.secondary.withValues(alpha: 0.4),
               ),
               icon: const Icon(Icons.add, color: Colors.white),
               label: const Text('New Conversation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -803,7 +803,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -836,7 +836,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                         ),
                         Text(
                           '${conv.studentName} · ${conv.studentClass}',
-                          style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 10),
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 10),
                         ),
                       ],
                     ),
@@ -854,7 +854,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.phone, color: Colors.white, size: 16),
@@ -966,7 +966,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                           if (msg.isAttachment)
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.12),
+                                color: Colors.black.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               padding: const EdgeInsets.all(10),
@@ -1146,7 +1146,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       leading: Container(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(color: AppColors.secondary.withOpacity(0.1), shape: BoxShape.circle),
+        decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.1), shape: BoxShape.circle),
         child: Icon(icon, color: AppColors.secondary),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -1156,5 +1156,5 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   }
 }
 class IconDataEx {
-  static const IconData volume_up = Icons.volume_up;
+  static const IconData volumeUp = Icons.volume_up;
 }

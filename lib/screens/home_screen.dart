@@ -20,10 +20,6 @@ class HomeScreen extends StatelessWidget {
       );
     }
 
-    // Determine unread messages count
-    int unreadMessagesCount = appState.parentConversations
-        .where((c) => c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
-        .length;
 
     final String schoolName = appState.currentSchoolName;
 
@@ -63,7 +59,7 @@ class HomeScreen extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(
@@ -93,7 +89,7 @@ class HomeScreen extends StatelessWidget {
                       Text(
                         teacher.name,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -101,7 +97,7 @@ class HomeScreen extends StatelessWidget {
                       Text(
                         '$designationText$assignedClassText',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 12,
                         ),
                       ),
@@ -117,7 +113,7 @@ class HomeScreen extends StatelessWidget {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     padding: const EdgeInsets.all(2),

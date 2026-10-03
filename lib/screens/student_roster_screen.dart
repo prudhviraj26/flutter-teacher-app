@@ -93,7 +93,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     final int absentCount = appState.isAttendanceSubmittedToday
         ? classStudents.where((s) => s.absentToday).length
         : 0;
-    final int feesCount = 0;
+    const int feesCount = 0;
     final int attendanceCount = classStudents.where((s) => s.attendancePercentage < 75).length;
 
     // Filtered list matching active tab & search query
@@ -139,7 +139,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -160,7 +160,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                             Text(
                               '$allCount ${appState.translate("totalStudents")}',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.85),
+                                color: Colors.white.withValues(alpha: 0.85),
                                 fontSize: 12,
                               ),
                             ),
@@ -174,9 +174,9 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.3)),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -401,7 +401,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                                                     decoration: BoxDecoration(
                                                       color: s.absentToday
                                                           ? const Color(0xFFFFEBEE)
-                                                          : AppColors.secondary.withOpacity(0.12),
+                                                          : AppColors.secondary.withValues(alpha: 0.12),
                                                       shape: BoxShape.circle,
                                                     ),
                                                     alignment: Alignment.center,
@@ -653,7 +653,7 @@ class StudentProfileScreen extends StatelessWidget {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),

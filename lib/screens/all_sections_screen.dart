@@ -183,7 +183,7 @@ class AllSectionsScreen extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -224,7 +224,7 @@ class AllSectionsScreen extends StatelessWidget {
                           offset: Offset(0, 4),
                         )
                       ],
-                      border: Border.all(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+                      border: Border.all(color: const Color(0xFFE5E7EB).withValues(alpha: 0.5)),
                     ),
                     padding: const EdgeInsets.all(20),
                     child: Column(
@@ -293,7 +293,7 @@ class AllSectionsScreen extends StatelessWidget {
                                           width: 36,
                                           height: 36,
                                           decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(0.3),
+                                            color: Colors.white.withValues(alpha: 0.3),
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Icon(f['icon'] as IconData, color: Colors.white, size: 20),
@@ -314,7 +314,7 @@ class AllSectionsScreen extends StatelessWidget {
                                     Text(
                                       f['subtitle'] as String,
                                       style: TextStyle(
-                                        color: Colors.white.withOpacity(0.9),
+                                        color: Colors.white.withValues(alpha: 0.9),
                                         fontSize: 10,
                                       ),
                                       maxLines: 1,

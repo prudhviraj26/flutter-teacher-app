@@ -122,7 +122,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.12),
+                      color: statusColor.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(statusIcon, color: statusColor, size: 24),
@@ -244,7 +244,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -266,7 +266,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                 // Month Selector
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -279,7 +279,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                           width: 34,
                           height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.chevron_left, color: Colors.white),
@@ -305,7 +305,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                           width: 34,
                           height: 34,
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.chevron_right, color: Colors.white),
@@ -351,7 +351,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: const Color(0xFFE5E7EB).withOpacity(0.5)),
+                            border: Border.all(color: const Color(0xFFE5E7EB).withValues(alpha: 0.5)),
                             boxShadow: const [
                               BoxShadow(
                                 color: Color(0x0A000000),
@@ -535,7 +535,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: bg,
-          border: Border.all(color: border.withOpacity(0.5)),
+          border: Border.all(color: border.withValues(alpha: 0.5)),
           borderRadius: BorderRadius.circular(14),
         ),
         padding: const EdgeInsets.symmetric(vertical: 10),

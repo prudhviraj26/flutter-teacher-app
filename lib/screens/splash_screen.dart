@@ -85,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               height: 340,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.withOpacity(0.12), width: 1),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.12), width: 1),
               ),
             ),
           ),
@@ -95,7 +95,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
               height: 460,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.withOpacity(0.06), width: 1),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.06), width: 1),
               ),
             ),
           ),

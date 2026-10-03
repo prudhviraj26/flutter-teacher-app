@@ -16,7 +16,7 @@ Widget _buildAppBar(BuildContext context, String title, Color color) {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -131,7 +131,7 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
                             children: [
                               CircleAvatar(
                                 radius: 48,
-                                backgroundColor: AppColors.primary.withOpacity(0.1),
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                                 child: Text(
                                   teacher?.name.isNotEmpty == true ? teacher!.name[0] : 'T',
                                   style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primary),
@@ -478,9 +478,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: const Color(0xFFBFDBFE)),
                         ),
-                        child: Row(
+                        child: const Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Icon(Icons.info_outline, color: Color(0xFF2563EB), size: 22),
                             SizedBox(width: 12),
                             Expanded(
@@ -916,7 +916,7 @@ class AboutUsScreen extends StatelessWidget {
                           width: 72,
                           height: 72,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
+                            color: AppColors.primary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.school, size: 36, color: AppColors.primary),
@@ -1171,7 +1171,7 @@ class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
                         value: _pushNotifications,
                         title: const Text('Push Notifications', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         subtitle: const Text('Get instant alerts for parent messages', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                        activeColor: AppColors.secondary,
+                        activeThumbColor: AppColors.secondary,
                         onChanged: (val) => setState(() => _pushNotifications = val),
                       ),
                       const Divider(color: Color(0xFFF3F4F6), height: 1),
@@ -1179,7 +1179,7 @@ class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
                         value: _emailAlerts,
                         title: const Text('Email Summaries', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         subtitle: const Text('Receive end-of-day homework posts reports', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                        activeColor: AppColors.secondary,
+                        activeThumbColor: AppColors.secondary,
                         onChanged: (val) => setState(() => _emailAlerts = val),
                       ),
                     ],
@@ -1198,7 +1198,7 @@ class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
                         value: _biometricLock,
                         title: const Text('Biometric Authentication', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         subtitle: const Text('Protect login portal using Face ID / Touch ID', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                        activeColor: AppColors.secondary,
+                        activeThumbColor: AppColors.secondary,
                         onChanged: (val) => setState(() => _biometricLock = val),
                       ),
                       const Divider(color: Color(0xFFF3F4F6), height: 1),
@@ -1206,7 +1206,7 @@ class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
                         value: _offlineCache,
                         title: const Text('Local Data Caching', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         subtitle: const Text('Encrypt and cache files locally for offline use', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                        activeColor: AppColors.secondary,
+                        activeThumbColor: AppColors.secondary,
                         onChanged: (val) => setState(() => _offlineCache = val),
                       ),
                     ],
@@ -1223,7 +1223,7 @@ class _PrivacySecurityScreenState extends State<PrivacySecurityScreen> {
                     value: _usageData,
                     title: const Text('Anonymous Analytics', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     subtitle: const Text('Share usage statistics to help us optimize UI speeds', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    activeColor: AppColors.secondary,
+                    activeThumbColor: AppColors.secondary,
                     onChanged: (val) => setState(() => _usageData = val),
                   ),
                 ),

@@ -233,7 +233,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: AppColors.secondary,
                       elevation: 4,
-                      shadowColor: AppColors.secondary.withOpacity(0.4),
+                      shadowColor: AppColors.secondary.withValues(alpha: 0.4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -343,10 +343,10 @@ class LoginIllustrationPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Backdrop shapes
-    final whitePaint30 = Paint()..color = Colors.white.withOpacity(0.3);
+    final whitePaint30 = Paint()..color = Colors.white.withValues(alpha: 0.3);
     final orangePaint = Paint()..color = AppColors.secondary;
     final whitePaint = Paint()..color = Colors.white;
-    final tealPaint20 = Paint()..color = AppColors.primary.withOpacity(0.2);
+    final tealPaint20 = Paint()..color = AppColors.primary.withValues(alpha: 0.2);
 
     // Circles
     canvas.drawCircle(Offset(size.width * 0.2, size.height * 0.25), 20, whitePaint30);

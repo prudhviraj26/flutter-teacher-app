@@ -21,14 +21,14 @@ class AppState extends ChangeNotifier {
   List<Announcement> _announcements = [];
   List<ClassUpdate> _classUpdates = [];
   List<DailyAttendance> _attendanceHistory = [];
-  List<ParentConversation> _parentConversations = [];
-  List<Duty> _duties = [];
+  final List<ParentConversation> _parentConversations = [];
+  final List<Duty> _duties = [];
   List<StaffNotice> _staffNotices = [];
   List<Notice> _notices = [];
-  List<Event> _events = [];
-  List<Album> _albums = [];
+  final List<Event> _events = [];
+  final List<Album> _albums = [];
   List<Holiday> _holidays = [];
-  List<ExamResult> _examResults = [];
+  final List<ExamResult> _examResults = [];
 
   // Active Attendance Marking Session
   Map<String, String> _tempAttendance = {}; // studentId -> status ('P' | 'A')

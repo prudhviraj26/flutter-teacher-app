@@ -69,7 +69,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -104,7 +104,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                     prefixIcon: const Icon(Icons.search, color: Colors.white60),
                     hintText: '${appState.translate('search')}...',
                     hintStyle: const TextStyle(color: Colors.white60),
-                    fillColor: Colors.white.withOpacity(0.1),
+                    fillColor: Colors.white.withValues(alpha: 0.1),
                     filled: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     border: OutlineInputBorder(
@@ -137,7 +137,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: isUnread ? AppColors.primary.withOpacity(0.5) : const Color(0xFFE5E7EB),
+                                color: isUnread ? AppColors.primary.withValues(alpha: 0.5) : const Color(0xFFE5E7EB),
                                 width: isUnread ? 1.5 : 1.0,
                               ),
                               boxShadow: const [
@@ -171,7 +171,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                                           width: 40,
                                           height: 40,
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withOpacity(0.1),
+                                            color: AppColors.primary.withValues(alpha: 0.1),
                                             shape: BoxShape.circle,
                                           ),
                                           child: const Icon(Icons.campaign, color: AppColors.primary),
@@ -485,7 +485,7 @@ class SchoolNoticeDetailScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             elevation: 4,
-                            shadowColor: AppColors.secondary.withOpacity(0.4),
+                            shadowColor: AppColors.secondary.withValues(alpha: 0.4),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,

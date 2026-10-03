@@ -39,7 +39,7 @@ class TeacherApp extends StatelessWidget {
               seedColor: AppColors.primary,
               primary: AppColors.primary,
               secondary: AppColors.secondary,
-              background: AppColors.background,
+              surface: AppColors.background,
             ),
             fontFamily: 'Inter',
             textTheme: const TextTheme(

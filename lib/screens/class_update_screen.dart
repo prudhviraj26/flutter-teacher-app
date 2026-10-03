@@ -208,7 +208,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               shape: BoxShape.circle,
                             ),
                             child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -235,7 +235,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
@@ -257,7 +257,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
+                            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -344,7 +344,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                   alignment: Alignment.center,
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: _type == 'Classwork' ? AppColors.primary : AppColors.primary.withOpacity(0.1),
+                                    color: _type == 'Classwork' ? AppColors.primary : AppColors.primary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -365,7 +365,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                   alignment: Alignment.center,
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: _type == 'Homework' ? AppColors.primary : AppColors.primary.withOpacity(0.1),
+                                    color: _type == 'Homework' ? AppColors.primary : AppColors.primary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -577,10 +577,10 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.08),
+                            color: AppColors.primary.withValues(alpha: 0.08),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(Icons.assignment_outlined, size: 32, color: AppColors.primary),
+                          child: const Icon(Icons.assignment_outlined, size: 32, color: AppColors.primary),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -633,7 +633,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     final item = filteredUpdates[index];
                     final isUnread = !appState.isNoticeRead(item.id);
                     final isHomework = item.type == 'Homework';
-                    final iconBg = isHomework ? AppColors.secondary.withOpacity(0.1) : AppColors.primary.withOpacity(0.1);
+                    final iconBg = isHomework ? AppColors.secondary.withValues(alpha: 0.1) : AppColors.primary.withValues(alpha: 0.1);
                     final iconColor = isHomework ? AppColors.secondary : AppColors.primary;
 
                     return Padding(
@@ -643,7 +643,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isUnread ? iconColor.withOpacity(0.5) : const Color(0xFFF3F4F6),
+                            color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
                             width: isUnread ? 1.5 : 1.0,
                           ),
                           boxShadow: const [
@@ -886,7 +886,7 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [themeColor, themeColor.withOpacity(0.8)],
+                          colors: [themeColor, themeColor.withValues(alpha: 0.8)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -921,7 +921,7 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             update.classTarget,
-                            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14),
                           ),
                           const SizedBox(height: 8),
                           Text(
@@ -998,7 +998,7 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: AttachmentHelper.getFileColor(attachment).withOpacity(0.1),
+                                  color: AttachmentHelper.getFileColor(attachment).withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(

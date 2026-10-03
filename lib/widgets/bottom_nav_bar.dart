@@ -24,7 +24,7 @@ class CustomBottomNavBar extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, -2),
           )
@@ -96,8 +96,8 @@ class CustomBottomNavBar extends StatelessWidget {
     required bool isActive,
     required VoidCallback onTap,
   }) {
-    final activeColor = AppColors.primary;
-    final inactiveColor = const Color(0xFF9CA3AF);
+    const activeColor = AppColors.primary;
+    const inactiveColor = Color(0xFF9CA3AF);
 
     return InkWell(
       onTap: onTap,

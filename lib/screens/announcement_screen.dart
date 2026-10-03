@@ -169,7 +169,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
+                          color: Colors.white.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(Icons.arrow_back, color: Colors.white),
@@ -196,7 +196,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
@@ -442,7 +442,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            color: AppColors.secondary.withOpacity(0.1),
+                            color: AppColors.secondary.withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.campaign_outlined, size: 32, color: AppColors.secondary),
@@ -497,7 +497,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     final item = list[index];
                     final isUnread = !appState.isNoticeRead(item.id);
                     final isTeal = index % 2 == 0;
-                    final iconBg = isTeal ? AppColors.primary.withOpacity(0.1) : AppColors.secondary.withOpacity(0.1);
+                    final iconBg = isTeal ? AppColors.primary.withValues(alpha: 0.1) : AppColors.secondary.withValues(alpha: 0.1);
                     final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
 
                     return Padding(
@@ -507,7 +507,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isUnread ? iconColor.withOpacity(0.5) : const Color(0xFFF3F4F6),
+                            color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
                             width: isUnread ? 1.5 : 1.0,
                           ),
                           boxShadow: const [
@@ -767,7 +767,7 @@ class AnnouncementDetailScreen extends StatelessWidget {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [themeColor, themeColor.withOpacity(0.8)],
+                          colors: [themeColor, themeColor.withValues(alpha: 0.8)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -804,7 +804,7 @@ class AnnouncementDetailScreen extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             announcement.author,
-                            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
                           ),
                           const SizedBox(height: 8),
                           Row(
@@ -857,7 +857,7 @@ class AnnouncementDetailScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: themeColor.withOpacity(0.1),
+                          color: themeColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -898,7 +898,7 @@ class AnnouncementDetailScreen extends StatelessWidget {
                                 width: 40,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: AttachmentHelper.getFileColor(att).withOpacity(0.1),
+                                  color: AttachmentHelper.getFileColor(att).withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Icon(
