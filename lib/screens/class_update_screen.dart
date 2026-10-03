@@ -631,6 +631,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     itemCount: filteredUpdates.length,
                   itemBuilder: (context, index) {
                     final item = filteredUpdates[index];
+                    final isUnread = !appState.isNoticeRead(item.id);
                     final isHomework = item.type == 'Homework';
                     final iconBg = isHomework ? AppColors.secondary.withOpacity(0.1) : AppColors.primary.withOpacity(0.1);
                     final iconColor = isHomework ? AppColors.secondary : AppColors.primary;
@@ -641,6 +642,10 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isUnread ? iconColor.withOpacity(0.5) : const Color(0xFFF3F4F6),
+                            width: isUnread ? 1.5 : 1.0,
+                          ),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x0A000000),
@@ -651,6 +656,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         ),
                         child: InkWell(
                           onTap: () {
+                            appState.markClassUpdateAsRead(item.id);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -685,11 +691,31 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Expanded(
-                                            child: Text(
-                                              item.title,
-                                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                            child: Row(
+                                              children: [
+                                                if (isUnread)
+                                                  Container(
+                                                    width: 8,
+                                                    height: 8,
+                                                    margin: const EdgeInsets.only(right: 6),
+                                                    decoration: BoxDecoration(
+                                                      color: iconColor,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                Expanded(
+                                                  child: Text(
+                                                    item.title,
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                      color: const Color(0xFF1F2937),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                           const SizedBox(width: 8),

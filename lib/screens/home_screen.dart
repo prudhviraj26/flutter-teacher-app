@@ -166,6 +166,7 @@ class HomeScreen extends StatelessWidget {
                             ? appState.translate('postUpdates')
                             : appState.translate('viewOnly'),
                         backgroundColor: AppColors.secondary,
+                        badgeCount: appState.unreadAnnouncementsCount,
                         onTap: () => Navigator.pushNamed(context, '/announcement'),
                       ),
                       // Class Update
@@ -174,6 +175,7 @@ class HomeScreen extends StatelessWidget {
                         title: appState.translate('classUpdate'),
                         subtitle: appState.translate('homeworkAndClasswork'),
                         backgroundColor: AppColors.primary,
+                        badgeCount: appState.unreadClassUpdatesCount,
                         onTap: () => Navigator.pushNamed(context, '/class-update'),
                       ),
                       // Attendance
@@ -203,7 +205,7 @@ class HomeScreen extends StatelessWidget {
                         title: appState.translate('parentConnect'),
                         subtitle: appState.translate('messageParents'),
                         backgroundColor: AppColors.secondary,
-                        badgeCount: unreadMessagesCount,
+                        badgeCount: appState.unreadParentMessagesCount,
                         onTap: () => Navigator.pushNamed(context, '/parent-connect'),
                       ),
                       // School Notice
@@ -220,6 +222,7 @@ class HomeScreen extends StatelessWidget {
                                 ? 'स्कूल सर्कुलर देखें'
                                 : 'View school circulars',
                         backgroundColor: AppColors.primary,
+                        badgeCount: appState.unreadSchoolNoticesCount,
                         onTap: () => Navigator.pushNamed(context, '/school-notice'),
                       ),
                     ],

@@ -129,13 +129,17 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                       itemCount: filteredNotices.length,
                       itemBuilder: (context, index) {
                         final notice = filteredNotices[index];
+                        final isUnread = !appState.isNoticeRead(notice.id);
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              border: Border.all(
+                                color: isUnread ? AppColors.primary.withOpacity(0.5) : const Color(0xFFE5E7EB),
+                                width: isUnread ? 1.5 : 1.0,
+                              ),
                               boxShadow: const [
                                 BoxShadow(
                                   color: Color(0x0A000000),
@@ -146,6 +150,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                             ),
                             child: InkWell(
                               onTap: () {
+                                appState.markNoticeAsRead(notice.id);
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
@@ -180,15 +185,31 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                 children: [
                                                   Expanded(
-                                                    child: Text(
-                                                      notice.title,
-                                                      style: const TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Color(0xFF1F2937),
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                    child: Row(
+                                                      children: [
+                                                        if (isUnread)
+                                                          Container(
+                                                            width: 8,
+                                                            height: 8,
+                                                            margin: const EdgeInsets.only(right: 6),
+                                                            decoration: const BoxDecoration(
+                                                              color: AppColors.primary,
+                                                              shape: BoxShape.circle,
+                                                            ),
+                                                          ),
+                                                        Expanded(
+                                                          child: Text(
+                                                            notice.title,
+                                                            style: TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                              color: const Color(0xFF1F2937),
+                                                            ),
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ),
                                                   const SizedBox(width: 6),

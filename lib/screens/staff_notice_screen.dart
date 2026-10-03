@@ -166,6 +166,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                     itemCount: notices.length,
                     itemBuilder: (context, index) {
                     final notice = notices[index];
+                    final isUnread = !appState.isNoticeRead(notice.id);
                     final isTeal = index % 2 == 0;
                     final iconBg = isTeal ? AppColors.primary.withOpacity(0.1) : AppColors.secondary.withOpacity(0.1);
                     final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
@@ -176,7 +177,10 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFF3F4F6)),
+                          border: Border.all(
+                            color: isUnread ? iconColor.withOpacity(0.5) : const Color(0xFFF3F4F6),
+                            width: isUnread ? 1.5 : 1.0,
+                          ),
                           boxShadow: const [
                             BoxShadow(
                               color: Color(0x0A000000),
@@ -187,6 +191,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                         ),
                         child: InkWell(
                           onTap: () {
+                            appState.markStaffNoticeAsRead(notice.id);
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -220,15 +225,31 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            notice.title,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF1F2937),
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
+                                          Row(
+                                            children: [
+                                              if (isUnread)
+                                                Container(
+                                                  width: 8,
+                                                  height: 8,
+                                                  margin: const EdgeInsets.only(right: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: iconColor,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                              Expanded(
+                                                child: Text(
+                                                  notice.title,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                    color: const Color(0xFF1F2937),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                           const SizedBox(height: 2),
                                           Row(

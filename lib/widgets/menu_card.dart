@@ -70,17 +70,25 @@ class _MenuCardState extends State<MenuCard> {
                   ),
                   if (widget.badgeCount > 0)
                     Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade600,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black26,
+                            blurRadius: 3,
+                            offset: Offset(0, 1),
+                          )
+                        ],
                       ),
                       constraints: const BoxConstraints(
                         minWidth: 22,
                         minHeight: 22,
                       ),
+                      alignment: Alignment.center,
                       child: Text(
-                        '${widget.badgeCount}',
+                        widget.badgeCount > 99 ? '99+' : '${widget.badgeCount}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,

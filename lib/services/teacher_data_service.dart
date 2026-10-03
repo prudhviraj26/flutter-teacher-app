@@ -128,6 +128,53 @@ class TeacherDataService {
     }
   }
 
+  // Mark Broadcast as Read on Backend
+  static Future<bool> markBroadcastRead(String broadcastId) async {
+    try {
+      final res = await ApiService.post('/communication/broadcasts/$broadcastId/read', {});
+      return res != null;
+    } catch (e) {
+      debugPrint('TeacherDataService.markBroadcastRead error: $e');
+      return false;
+    }
+  }
+
+  // Register Device Push Token
+  static Future<bool> registerDeviceToken({
+    required String deviceToken,
+    String platform = 'android',
+    String? deviceModel,
+    String? osVersion,
+    String? appVersion,
+  }) async {
+    try {
+      final res = await ApiService.post('/communication/device-token', {
+        'deviceToken': deviceToken,
+        'platform': platform,
+        if (deviceModel != null) 'deviceModel': deviceModel,
+        if (osVersion != null) 'osVersion': osVersion,
+        if (appVersion != null) 'appVersion': appVersion,
+      });
+      return res != null;
+    } catch (e) {
+      debugPrint('TeacherDataService.registerDeviceToken error: $e');
+      return false;
+    }
+  }
+
+  // Remove Device Push Token
+  static Future<bool> removeDeviceToken(String deviceToken) async {
+    try {
+      final res = await ApiService.post('/communication/device-token/remove', {
+        'deviceToken': deviceToken,
+      });
+      return res != null;
+    } catch (e) {
+      debugPrint('TeacherDataService.removeDeviceToken error: $e');
+      return false;
+    }
+  }
+
   // Fetch Staff Subject Assignments
   static Future<List<String>> fetchSubjectAssignments(String staffId) async {
     try {

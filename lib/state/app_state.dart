@@ -42,6 +42,9 @@ class AppState extends ChangeNotifier {
   TeacherMonthlyAttendance? _monthlyAttendance;
   bool _isLoadingMonthlyAttendance = false;
 
+  // Read Tracking for Badges
+  Set<String> _readNoticeIds = {};
+
   // Getters
   String get language => _language;
   bool get loggedIn => _loggedIn;
@@ -54,6 +57,33 @@ class AppState extends ChangeNotifier {
   bool get isSubmittingAttendance => _isSubmittingAttendance;
   TeacherMonthlyAttendance? get monthlyAttendance => _monthlyAttendance;
   bool get isLoadingMonthlyAttendance => _isLoadingMonthlyAttendance;
+
+  // Read Tracking Getters & Badge Counters
+  Set<String> get readNoticeIds => _readNoticeIds;
+  bool isNoticeRead(String id) => _readNoticeIds.contains(id);
+
+  int get unreadSchoolNoticesCount =>
+      _notices.where((n) => !_readNoticeIds.contains(n.id)).length;
+
+  int get unreadStaffNoticesCount =>
+      _staffNotices.where((n) => !_readNoticeIds.contains(n.id)).length;
+
+  int get unreadAnnouncementsCount =>
+      _announcements.where((a) => !_readNoticeIds.contains(a.id)).length;
+
+  int get unreadClassUpdatesCount =>
+      _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).length;
+
+  int get unreadParentMessagesCount => _parentConversations
+      .where((c) => c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
+      .length;
+
+  int get totalUnreadCommunicationsCount =>
+      unreadSchoolNoticesCount +
+      unreadStaffNoticesCount +
+      unreadAnnouncementsCount +
+      unreadClassUpdatesCount +
+      unreadParentMessagesCount;
 
   final SchoolConfig schoolConfig = SchoolConfig(
     name: 'Demo International School',
@@ -105,12 +135,14 @@ class AppState extends ChangeNotifier {
     }
     
     // Load cached notices and class updates immediately on startup
+    await _loadReadNoticeIds();
     await _loadCachedNotices();
     await _loadClassUpdates();
 
     notifyListeners();
 
     if (_loggedIn) {
+      _registerDeviceToken();
       loadLiveData();
     }
   }
@@ -362,6 +394,8 @@ class AppState extends ChangeNotifier {
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
         _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
+        await _loadReadNoticeIds();
+        await _registerDeviceToken();
         await loadLiveData();
         notifyListeners();
         return true;
@@ -401,6 +435,7 @@ class AppState extends ChangeNotifier {
 
   // Logout Logic
   Future<void> logout() async {
+    await _removeDeviceToken();
     await AuthService.logout();
     _loggedIn = false;
     _mustChangePassword = false;
@@ -409,6 +444,64 @@ class AppState extends ChangeNotifier {
     await _prefs?.remove('veyho_teacher_user');
     notifyListeners();
   }
+
+  // Device Token Registration & Removal for FCM Push Pipeline
+  Future<void> _registerDeviceToken() async {
+    if (!_loggedIn) return;
+    try {
+      String? token = _prefs?.getString('veyho_device_token');
+      if (token == null || token.isEmpty) {
+        token = "fcm_${_teacher?.employeeId ?? 'teacher'}_${DateTime.now().millisecondsSinceEpoch}";
+        await _prefs?.setString('veyho_device_token', token);
+      }
+      await TeacherDataService.registerDeviceToken(
+        deviceToken: token,
+        platform: 'android',
+        deviceModel: 'Android Emulator / Device',
+        osVersion: 'Android 14 (API 34/36)',
+        appVersion: '1.0.0',
+      );
+    } catch (e) {
+      debugPrint("Device token registration error: $e");
+    }
+  }
+
+  Future<void> _removeDeviceToken() async {
+    try {
+      final token = _prefs?.getString('veyho_device_token');
+      if (token != null && token.isNotEmpty) {
+        await TeacherDataService.removeDeviceToken(token);
+      }
+    } catch (e) {
+      debugPrint("Device token removal error: $e");
+    }
+  }
+
+  // Read Tracking Persistence & Live Sync Helpers
+  Future<void> _loadReadNoticeIds() async {
+    final teacherId = _teacher?.id ?? 'default';
+    final list = _prefs?.getStringList('veyho_read_broadcasts_$teacherId') ?? [];
+    _readNoticeIds = list.toSet();
+  }
+
+  Future<void> _saveReadNoticeIds() async {
+    final teacherId = _teacher?.id ?? 'default';
+    await _prefs?.setStringList('veyho_read_broadcasts_$teacherId', _readNoticeIds.toList());
+  }
+
+  Future<void> markNoticeAsRead(String id) async {
+    if (id.isEmpty || _readNoticeIds.contains(id)) return;
+    _readNoticeIds.add(id);
+    await _saveReadNoticeIds();
+    notifyListeners();
+    if (_loggedIn) {
+      TeacherDataService.markBroadcastRead(id).catchError((_) => false);
+    }
+  }
+
+  Future<void> markStaffNoticeAsRead(String id) async => markNoticeAsRead(id);
+  Future<void> markAnnouncementAsRead(String id) async => markNoticeAsRead(id);
+  Future<void> markClassUpdateAsRead(String id) async => markNoticeAsRead(id);
 
   // Academic Year Check Helper (2026-04-01 to 2027-03-31)
   bool _isWithinCurrentAcademicYear(String? dateStr) {
