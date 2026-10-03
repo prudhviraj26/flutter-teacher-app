@@ -34,6 +34,23 @@ class AuthService {
     return response as Map<String, dynamic>;
   }
 
+  // Change Staff Password
+  static Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final refreshToken = await ApiService.getRefreshToken();
+    await ApiService.post(
+      '/auth/change-password',
+      {
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+        if (refreshToken != null && refreshToken.isNotEmpty) 'refreshToken': refreshToken,
+      },
+      requireAuth: true,
+    );
+  }
+
   // Logout
   static Future<void> logout() async {
     try {
@@ -45,3 +62,4 @@ class AuthService {
     }
   }
 }
+

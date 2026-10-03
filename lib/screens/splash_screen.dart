@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../widgets/veyho_logo.dart';
 import '../constants/colors.dart';
+import 'profile_menu_screens.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -47,7 +48,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (mounted) {
         final appState = Provider.of<AppState>(context, listen: false);
         if (appState.loggedIn) {
-          Navigator.pushReplacementNamed(context, '/home');
+          if (appState.mustChangePassword) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
+              ),
+            );
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
         } else {
           Navigator.pushReplacementNamed(context, '/login');
         }

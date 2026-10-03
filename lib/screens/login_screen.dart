@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../widgets/veyho_logo.dart';
+import 'profile_menu_screens.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -53,7 +54,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success) {
       if (context.mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
+        if (appState.mustChangePassword) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
+            ),
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
       }
     } else {
       if (context.mounted) {

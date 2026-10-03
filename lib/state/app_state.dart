@@ -12,10 +12,11 @@ class AppState extends ChangeNotifier {
   // Language & Session
   String _language = 'en';
   bool _loggedIn = false;
+  bool _mustChangePassword = false;
   Teacher? _teacher;
   String? _profilePic;
 
-  // Mock Data lists
+  // Live Data lists
   List<Student> _students = [];
   List<Announcement> _announcements = [];
   List<ClassUpdate> _classUpdates = [];
@@ -44,6 +45,7 @@ class AppState extends ChangeNotifier {
   // Getters
   String get language => _language;
   bool get loggedIn => _loggedIn;
+  bool get mustChangePassword => _mustChangePassword;
   Teacher? get teacher => _teacher;
   String? get profilePic => _profilePic;
   String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
@@ -350,6 +352,7 @@ class AppState extends ChangeNotifier {
           schoolName: apiSchoolName,
         );
 
+        _mustChangePassword = (response['mustChangePassword'] == true) || (userMap['mustChangePassword'] == true);
         _loggedIn = true;
         _teacher = loadedTeacher;
 
@@ -363,68 +366,44 @@ class AppState extends ChangeNotifier {
         notifyListeners();
         return true;
       }
+      return false;
     } catch (e) {
-      debugPrint("API login failed, checking demo fallback: $e");
+      debugPrint("API login failed: $e");
+      return false;
     }
+  }
 
-    // Standard school accounts mapping from mockData.ts
-    // Mobile 9999999999 = Class Teacher (Mrs. Priya Patel)
-    // Mobile 1111111111 = Subject Teacher (Mr. Arjun Desai)
-    bool isClass = mobile == '9999999999';
-    bool isSubject = mobile == '1111111111';
-
-    if (!isClass && !isSubject) return false;
-
-    Teacher loadedTeacher;
-    if (isClass) {
-      loadedTeacher = Teacher(
-        id: 'T001',
-        name: 'Mrs. Priya Patel',
-        employeeId: 'EMP-2020-042',
-        mobile: '+91 99999 99999',
-        email: 'priya.patel@school.com',
-        designation: 'Class Teacher',
-        assignedClass: 'Grade 3-B',
-        subjects: ['Mathematics', 'Science'],
-        joiningDate: '01-06-2020',
-        schoolName: 'Demo International School',
+  // Change Password
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await AuthService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
       );
-    } else {
-      loadedTeacher = Teacher(
-        id: 'T002',
-        name: 'Mr. Arjun Desai',
-        employeeId: 'EMP-2019-028',
-        mobile: '+91 11111 11111',
-        email: 'arjun.desai@school.com',
-        designation: 'Subject Teacher',
-        assignedClasses: ['Grade 3-A', 'Grade 3-B', 'Grade 4-A', 'Grade 4-B'],
-        subjects: ['English'],
-        joiningDate: '15-07-2019',
-        schoolName: 'Demo International School',
-      );
+      _mustChangePassword = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      debugPrint("AppState.changePassword error: $e");
+      final err = e.toString().replaceAll('Exception: ', '').trim();
+      if (err.contains('invalid_current_password') || err.toLowerCase().contains('invalid current') || err.toLowerCase().contains('current password')) {
+        return 'Current temporary password is incorrect';
+      }
+      if (err.contains('cannot be the same')) {
+        return 'New password cannot be the same as current password';
+      }
+      return err.isNotEmpty ? err : 'Failed to update password. Please try again.';
     }
-
-    _loggedIn = true;
-    _teacher = loadedTeacher;
-    
-    // Save session
-    final userData = {
-      'loggedIn': true,
-      'teacher': loadedTeacher.toJson(),
-    };
-    await _prefs?.setString('veyho_teacher_user', json.encode(userData));
-
-    // Load custom profile pic if any
-    _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
-    
-    notifyListeners();
-    return true;
   }
 
   // Logout Logic
   Future<void> logout() async {
     await AuthService.logout();
     _loggedIn = false;
+    _mustChangePassword = false;
     _teacher = null;
     _profilePic = null;
     await _prefs?.remove('veyho_teacher_user');
@@ -709,25 +688,25 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      // Fallback mock generator for offline/demo mode
-      _monthlyAttendance = _generateMockMonthlyAttendance(month);
+      // Default empty monthly calendar if live API is unavailable
+      _monthlyAttendance = _createEmptyMonthlyAttendance(month);
     } catch (e) {
       debugPrint("Error in fetchMonthlyAttendance: $e");
-      _monthlyAttendance = _generateMockMonthlyAttendance(month);
+      _monthlyAttendance = _createEmptyMonthlyAttendance(month);
     } finally {
       _isLoadingMonthlyAttendance = false;
       notifyListeners();
     }
   }
 
-  TeacherMonthlyAttendance _generateMockMonthlyAttendance(String month) {
+  TeacherMonthlyAttendance _createEmptyMonthlyAttendance(String month) {
     final parts = month.split('-');
     final year = int.tryParse(parts[0]) ?? DateTime.now().year;
     final m = parts.length > 1 ? (int.tryParse(parts[1]) ?? DateTime.now().month) : DateTime.now().month;
     final totalDays = DateUtils.getDaysInMonth(year, m);
 
     final List<TeacherDayAttendance> days = [];
-    int present = 0, absent = 0, halfDay = 0, leave = 0, notMarked = 0, instructional = 0;
+    int instructional = 0;
 
     for (int d = 1; d <= totalDays; d++) {
       final dt = DateTime(year, m, d);
@@ -736,48 +715,19 @@ class AppState extends ChangeNotifier {
       final dateStr = "$year-${m.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}";
       final dayOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][dt.weekday - 1];
 
-      bool isHoliday = false;
-      String? holidayName;
-      String? status;
-
-      if (d == 1 && m == 5) {
-        isHoliday = true;
-        holidayName = 'Maharashtra Day';
-      } else if (d == 15 && m == 8) {
-        isHoliday = true;
-        holidayName = 'Independence Day';
-      } else if (d == 2 && m == 10) {
-        isHoliday = true;
-        holidayName = 'Gandhi Jayanti';
-      } else if (isWorking) {
+      if (isWorking) {
         instructional++;
-        if (d <= DateTime.now().day && dt.isBefore(DateTime.now())) {
-          if (d == 7) {
-            status = 'absent';
-            absent++;
-          } else if (d == 9) {
-            status = 'leave';
-            leave++;
-          } else {
-            status = 'present';
-            present++;
-          }
-        } else {
-          notMarked++;
-        }
       }
 
       days.add(TeacherDayAttendance(
         date: dateStr,
         dayOfWeek: dayOfWeek,
         isWorkingDay: isWorking,
-        isHoliday: isHoliday,
-        holidayName: holidayName,
-        status: status,
+        isHoliday: false,
+        holidayName: null,
+        status: null,
       ));
     }
-
-    final double? pct = instructional > 0 ? ((present + 0.5 * halfDay) / instructional) * 100 : null;
 
     final monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     final monthLabel = "${monthNames[m - 1]} $year";
@@ -787,12 +737,12 @@ class AppState extends ChangeNotifier {
       monthLabel: monthLabel,
       instructionalDays: instructional,
       summary: TeacherAttendanceSummary(
-        daysPresent: present,
-        daysAbsent: absent,
-        daysHalfDay: halfDay,
-        daysLeave: leave,
-        daysNotMarked: notMarked,
-        attendancePercent: pct != null ? (pct * 10).round() / 10 : null,
+        daysPresent: 0,
+        daysAbsent: 0,
+        daysHalfDay: 0,
+        daysLeave: 0,
+        daysNotMarked: instructional,
+        attendancePercent: null,
       ),
       days: days,
     );

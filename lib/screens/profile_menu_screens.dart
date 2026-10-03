@@ -147,7 +147,7 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
                                     icon: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
                                     onPressed: () {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Camera capture mock triggered')),
+                                        const SnackBar(content: Text('Profile photo is managed by school administration.')),
                                       );
                                     },
                                   ),
@@ -303,7 +303,8 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
 
 // 2. CHANGE PASSWORD SCREEN
 class ChangePasswordScreen extends StatefulWidget {
-  const ChangePasswordScreen({super.key});
+  final bool isFirstLogin;
+  const ChangePasswordScreen({super.key, this.isFirstLogin = false});
 
   @override
   State<ChangePasswordScreen> createState() => _ChangePasswordScreenState();
@@ -320,6 +321,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _isSaving = false;
 
   @override
+  void initState() {
+    super.initState();
+    _newController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _currentController.dispose();
     _newController.dispose();
@@ -327,39 +336,131 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
-  void _changePassword() {
-    if (_formKey.currentState!.validate()) {
+  bool _hasMinLength(String pwd) => pwd.length >= 10;
+  bool _hasUppercase(String pwd) => pwd.contains(RegExp(r'[A-Z]'));
+  bool _hasLowercase(String pwd) => pwd.contains(RegExp(r'[a-z]'));
+  bool _hasNumber(String pwd) => pwd.contains(RegExp(r'[0-9]'));
+  bool _hasSymbol(String pwd) => pwd.contains(RegExp(r'[@$!%*?&]'));
+
+  int _calculateStrength(String pwd) {
+    int score = 0;
+    if (_hasMinLength(pwd)) score++;
+    if (_hasUppercase(pwd)) score++;
+    if (_hasLowercase(pwd)) score++;
+    if (_hasNumber(pwd)) score++;
+    if (_hasSymbol(pwd)) score++;
+    return score;
+  }
+
+  Future<void> _changePassword(AppState appState) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final currentPwd = _currentController.text.trim();
+    final newPwd = _newController.text.trim();
+
+    if (_calculateStrength(newPwd) < 5) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please satisfy all password security requirements.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (currentPwd == newPwd) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('New password cannot be the same as current password.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    final error = await appState.changePassword(
+      currentPassword: currentPwd,
+      newPassword: newPwd,
+    );
+
+    if (mounted) {
       setState(() {
-        _isSaving = true;
+        _isSaving = false;
       });
-      Future.delayed(const Duration(milliseconds: 1200), () {
-        if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Password updated successfully!'),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
+
+      if (error == null) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.isFirstLogin
+                ? 'Permanent password set successfully! Welcome to Veyho.'
+                : 'Password updated successfully!'),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+
+        if (widget.isFirstLogin) {
+          Navigator.pushReplacementNamed(context, '/home');
+        } else {
           Navigator.pop(context);
         }
-      });
+      } else {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
+    final newPwd = _newController.text;
+    final strength = _calculateStrength(newPwd);
+
+    Color strengthColor = Colors.red;
+    String strengthText = 'Weak';
+    if (strength == 5) {
+      strengthColor = AppColors.success;
+      strengthText = 'Strong';
+    } else if (strength >= 3) {
+      strengthColor = Colors.amber.shade700;
+      strengthText = 'Moderate';
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       body: Column(
         children: [
-          _buildAppBar(context, appState.translate('changePassword'), AppColors.primary),
+          _buildCustomAppBar(
+            context,
+            widget.isFirstLogin ? 'Set Permanent Password' : appState.translate('changePassword'),
+            AppColors.primary,
+            showBack: !widget.isFirstLogin,
+            onBack: () => Navigator.pop(context),
+            onLogout: widget.isFirstLogin
+                ? () async {
+                    await appState.logout();
+                    if (context.mounted) {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    }
+                  }
+                : null,
+          ),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
@@ -368,6 +469,35 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (widget.isFirstLogin)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Icon(Icons.info_outline, color: Color(0xFF2563EB), size: 22),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                "You are currently logged in with a temporary password. Please set your own secure password to proceed.",
+                                style: TextStyle(
+                                  color: Color(0xFF1E40AF),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -378,14 +508,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Current Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                          Text(
+                            widget.isFirstLogin ? 'Current Temporary Password' : 'Current Password',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                          ),
                           const SizedBox(height: 6),
                           TextFormField(
                             controller: _currentController,
                             obscureText: _obscureCurrent,
-                            validator: (val) => val == null || val.length < 4 ? 'Enter valid password' : null,
+                            validator: (val) => val == null || val.isEmpty
+                                ? (widget.isFirstLogin ? 'Enter temporary password' : 'Enter current password')
+                                : null,
                             decoration: InputDecoration(
-                              hintText: 'Enter Current Password',
+                              hintText: widget.isFirstLogin ? 'Enter Temporary Password' : 'Enter Current Password',
                               fillColor: const Color(0xFFF5F7FA),
                               filled: true,
                               suffixIcon: IconButton(
@@ -402,7 +537,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           TextFormField(
                             controller: _newController,
                             obscureText: _obscureNew,
-                            validator: (val) => val == null || val.length < 6 ? 'Password must be at least 6 characters' : null,
+                            validator: (val) {
+                              if (val == null || val.isEmpty) return 'Please enter new password';
+                              if (val.length < 10) return 'Password must be at least 10 characters';
+                              if (!RegExp(r'[A-Z]').hasMatch(val)) return 'Must include at least 1 uppercase letter';
+                              if (!RegExp(r'[a-z]').hasMatch(val)) return 'Must include at least 1 lowercase letter';
+                              if (!RegExp(r'[0-9]').hasMatch(val)) return 'Must include at least 1 number';
+                              if (!RegExp(r'[@$!%*?&]').hasMatch(val)) return 'Must include at least 1 symbol (@\$!%*?&)';
+                              return null;
+                            },
                             decoration: InputDecoration(
                               hintText: 'Enter New Password',
                               fillColor: const Color(0xFFF5F7FA),
@@ -414,6 +557,36 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                             ),
                           ),
+
+                          // Strength Meter
+                          if (newPwd.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Password Strength:', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                Text(strengthText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: strengthColor)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: strength / 5.0,
+                                minHeight: 4,
+                                backgroundColor: const Color(0xFFE5E7EB),
+                                valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Security Checklist
+                            _buildRequirementItem('At least 10 characters', _hasMinLength(newPwd)),
+                            _buildRequirementItem('At least 1 uppercase letter (A-Z)', _hasUppercase(newPwd)),
+                            _buildRequirementItem('At least 1 lowercase letter (a-z)', _hasLowercase(newPwd)),
+                            _buildRequirementItem('At least 1 number (0-9)', _hasNumber(newPwd)),
+                            _buildRequirementItem('At least 1 special symbol (@\$!%*?&)', _hasSymbol(newPwd)),
+                          ],
+
                           const SizedBox(height: 16),
 
                           const Text('Confirm New Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
@@ -421,7 +594,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           TextFormField(
                             controller: _confirmController,
                             obscureText: _obscureConfirm,
-                            validator: (val) => val != _newController.text ? 'Passwords do not match' : null,
+                            validator: (val) {
+                              if (val == null || val.isEmpty) return 'Please re-enter new password';
+                              if (val != _newController.text) return 'Passwords do not match';
+                              return null;
+                            },
                             decoration: InputDecoration(
                               hintText: 'Re-enter New Password',
                               fillColor: const Color(0xFFF5F7FA),
@@ -439,7 +616,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     const SizedBox(height: 32),
 
                     ElevatedButton(
-                      onPressed: _isSaving ? null : _changePassword,
+                      onPressed: _isSaving ? null : () => _changePassword(appState),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -448,13 +625,90 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       ),
                       child: _isSaving
                           ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Update Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          : Text(
+                              widget.isFirstLogin ? 'Set Password & Continue' : 'Update Password',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
                     ),
                   ],
                 ),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementItem(String text, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 14,
+            color: isMet ? AppColors.success : Colors.grey,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                color: isMet ? const Color(0xFF374151) : Colors.grey,
+                fontWeight: isMet ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomAppBar(
+    BuildContext context,
+    String title,
+    Color bg, {
+    bool showBack = true,
+    VoidCallback? onBack,
+    VoidCallback? onLogout,
+  }) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 12,
+        bottom: 16,
+        left: 16,
+        right: 16,
+      ),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(24),
+          bottomRight: Radius.circular(24),
+        ),
+      ),
+      child: Row(
+        children: [
+          if (showBack)
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: onBack ?? () => Navigator.pop(context),
+            )
+          else
+            const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          if (onLogout != null)
+            TextButton.icon(
+              onPressed: onLogout,
+              icon: const Icon(Icons.logout, color: Colors.white70, size: 16),
+              label: const Text('Logout', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ),
         ],
       ),
     );
