@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class ApiService {
   // Base URL for Azure Web App API
   static String get baseUrl {
-    return 'https://veyho-gdbth8e2d4angha9.centralindia-01.azurewebsites.net/v1';
+    return 'https://veyhoprod-crb8ahfge9dmhwep.centralindia-01.azurewebsites.net/v1';
   }
 
   static const _storage = FlutterSecureStorage();
