@@ -428,6 +428,8 @@ class TeacherDataService {
       attachments = (json['mediaUrls'] as List).map((m) => m.toString()).toList();
     }
 
+    final bool isRead = json['isRead'] == true || json['is_read'] == true;
+
     return Announcement(
       id: id,
       title: title,
@@ -440,6 +442,7 @@ class TeacherDataService {
       scope: scope,
       fullDate: json['createdAt']?.toString(),
       attachments: attachments,
+      isRead: isRead,
     );
   }
 }

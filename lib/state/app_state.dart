@@ -68,8 +68,14 @@ class AppState extends ChangeNotifier {
   int get unreadStaffNoticesCount =>
       _staffNotices.where((n) => !_readNoticeIds.contains(n.id)).length;
 
-  int get unreadAnnouncementsCount =>
-      _announcements.where((a) => !_readNoticeIds.contains(a.id)).length;
+  int get unreadAnnouncementsCount {
+    return _announcements.where((a) {
+      final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+          (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+      if (isAuthoredByTeacher) return false;
+      return !_readNoticeIds.contains(a.id);
+    }).length;
+  }
 
   int get unreadClassUpdatesCount =>
       _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).length;
@@ -148,93 +154,131 @@ class AppState extends ChangeNotifier {
   }
 
   // Load Live Data from NestJS API
-  Future<void> loadLiveData() async {
+  Future<void> loadLiveData({bool skipGetMe = false}) async {
     if (!_loggedIn) return;
 
     _isLoadingStudents = true;
     notifyListeners();
 
     try {
-      // Refresh current teacher details from /auth/me if available
-      try {
-        final meResponse = await AuthService.getMe();
-        final userMap = meResponse['user'] as Map<String, dynamic>?;
-        if (userMap != null) {
-          final String firstName = userMap['firstName'] ?? '';
-          final String lastName = userMap['lastName'] ?? '';
-          final String fullName = "$firstName $lastName".trim();
-          final String role = userMap['role'] ?? 'class_teacher';
+      // Refresh current teacher details from /auth/me if available and not skipped
+      if (!skipGetMe) {
+        try {
+          final meResponse = await AuthService.getMe();
+          final userMap = meResponse['user'] as Map<String, dynamic>?;
+          if (userMap != null) {
+            final String firstName = userMap['firstName'] ?? '';
+            final String lastName = userMap['lastName'] ?? '';
+            final String fullName = "$firstName $lastName".trim();
+            final String role = userMap['role'] ?? 'class_teacher';
 
-          final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
-          final String? apiAssignedClass = userMap['assignedClass'] as String?;
-          final String? apiSectionId = userMap['sectionId'] as String?;
-          final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+            final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
+            final String? apiAssignedClass = userMap['assignedClass'] as String?;
+            final String? apiSectionId = userMap['sectionId'] as String?;
+            final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
 
-          List<String> parsedSubjects = [];
-          if (userMap['subjects'] != null && userMap['subjects'] is List) {
-            parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+            List<String> parsedSubjects = [];
+            if (userMap['subjects'] != null && userMap['subjects'] is List) {
+              parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+            }
+            if (parsedSubjects.isEmpty) {
+              parsedSubjects = ['General'];
+            }
+
+            List<String>? parsedAssignedClasses;
+            if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
+              parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+            }
+
+            final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
+                ? 'Class Teacher'
+                : 'Subject Teacher';
+
+            final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
+
+            _teacher = Teacher(
+              id: userMap['id'] ?? 'T001',
+              name: fullName.isNotEmpty ? fullName : 'Teacher',
+              employeeId: apiEmployeeId,
+              mobile: userMap['mobile'] ?? (_teacher?.mobile ?? ''),
+              email: userMap['email'] ?? '',
+              designation: designation,
+              assignedClass: apiAssignedClass,
+              sectionId: apiSectionId,
+              assignedClasses: parsedAssignedClasses,
+              subjects: parsedSubjects,
+              joiningDate: joiningDate,
+              schoolName: apiSchoolName,
+            );
           }
-          if (parsedSubjects.isEmpty) {
-            parsedSubjects = ['General'];
-          }
-
-          List<String>? parsedAssignedClasses;
-          if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
-            parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-          }
-
-          final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
-              ? 'Class Teacher'
-              : 'Subject Teacher';
-
-          final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
-
-          _teacher = Teacher(
-            id: userMap['id'] ?? 'T001',
-            name: fullName.isNotEmpty ? fullName : 'Teacher',
-            employeeId: apiEmployeeId,
-            mobile: userMap['mobile'] ?? (_teacher?.mobile ?? ''),
-            email: userMap['email'] ?? '',
-            designation: designation,
-            assignedClass: apiAssignedClass,
-            sectionId: apiSectionId,
-            assignedClasses: parsedAssignedClasses,
-            subjects: parsedSubjects,
-            joiningDate: joiningDate,
-            schoolName: apiSchoolName,
-          );
+        } catch (e) {
+          debugPrint("AuthService.getMe error during loadLiveData: $e");
         }
-      } catch (e) {
-        debugPrint("AuthService.getMe error during loadLiveData: $e");
       }
 
       final String? teacherSectionId = _teacher?.sectionId;
-      var liveStudents = await TeacherDataService.fetchStudents(sectionId: teacherSectionId);
-      if (liveStudents.isEmpty && teacherSectionId != null) {
-        // Fallback to fetch all students in school if section filter returns empty
-        liveStudents = await TeacherDataService.fetchStudents();
-      }
-      _students = liveStudents;
 
-      // Fetch live attendance percentages for academic year from attendance reporting
-      try {
-        final attPercentages = await TeacherDataService.fetchStudentAttendancePercentages(
-          sectionId: teacherSectionId,
-        );
-        if (attPercentages.isNotEmpty) {
-          _students = _students.map((s) {
-            if (attPercentages.containsKey(s.id)) {
-              return s.copyWith(attendancePercentage: attPercentages[s.id]);
+      // Run independent data fetching pipelines concurrently
+      await Future.wait([
+        // Pipeline 1: Live students and attendance percentages
+        () async {
+          try {
+            var liveStudents = await TeacherDataService.fetchStudents(sectionId: teacherSectionId);
+            if (liveStudents.isEmpty && teacherSectionId != null) {
+              liveStudents = await TeacherDataService.fetchStudents();
             }
-            return s;
-          }).toList();
-        }
-      } catch (attErr) {
-        debugPrint("Error fetching student attendance percentages: $attErr");
-      }
+            _students = liveStudents;
 
-      // Check today's attendance session from backend
-      await fetchTodayAttendanceSession();
+            try {
+              final attPercentages = await TeacherDataService.fetchStudentAttendancePercentages(
+                sectionId: teacherSectionId,
+              );
+              if (attPercentages.isNotEmpty) {
+                _students = _students.map((s) {
+                  if (attPercentages.containsKey(s.id)) {
+                    return s.copyWith(attendancePercentage: attPercentages[s.id]);
+                  }
+                  return s;
+                }).toList();
+              }
+            } catch (attErr) {
+              debugPrint("Error fetching student attendance percentages: $attErr");
+            }
+          } catch (e) {
+            debugPrint("Error fetching live students: $e");
+          }
+        }(),
+
+        // Pipeline 2: Today's attendance session
+        () async {
+          try {
+            await fetchTodayAttendanceSession();
+          } catch (e) {
+            debugPrint("Error fetching today attendance session: $e");
+          }
+        }(),
+
+        // Pipeline 3: Broadcasts and notices (updates notification badge counters)
+        () async {
+          try {
+            await refreshBroadcasts();
+          } catch (e) {
+            debugPrint("Error refreshing broadcasts: $e");
+          }
+        }(),
+
+        // Pipeline 4: School holidays
+        () async {
+          try {
+            final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
+            if (liveHolidays.isNotEmpty) {
+              _holidays = liveHolidays;
+            }
+          } catch (hErr) {
+            debugPrint("Error fetching live holidays: $hErr");
+          }
+        }(),
+      ]);
 
       // Fetch live subject assignments if current subjects are empty or default to General
       if (_teacher != null && (_teacher!.subjects.isEmpty || _teacher!.subjects.contains('General'))) {
@@ -270,19 +314,8 @@ class AppState extends ChangeNotifier {
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
       }
 
-      await refreshBroadcasts();
       await _loadClassUpdates();
       initTempAttendance();
-
-      // Fetch school holidays from web admin portal
-      try {
-        final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
-        if (liveHolidays.isNotEmpty) {
-          _holidays = liveHolidays;
-        }
-      } catch (hErr) {
-        debugPrint("Error fetching live holidays: $hErr");
-      }
 
       // Fetch teacher's monthly attendance for the current month
       final now = DateTime.now();
@@ -394,10 +427,18 @@ class AppState extends ChangeNotifier {
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
         _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
+        // Instant local cache loads
         await _loadReadNoticeIds();
-        await _registerDeviceToken();
-        await loadLiveData();
+        await _loadCachedNotices();
+        await _loadClassUpdates();
         notifyListeners();
+
+        // Non-blocking background sync:
+        // Transition into home instantly (<0.5s) while device registration
+        // and parallel live data sync proceed in the background.
+        _registerDeviceToken();
+        loadLiveData(skipGetMe: true);
+
         return true;
       }
       return false;
@@ -503,6 +544,47 @@ class AppState extends ChangeNotifier {
   Future<void> markAnnouncementAsRead(String id) async => markNoticeAsRead(id);
   Future<void> markClassUpdateAsRead(String id) async => markNoticeAsRead(id);
 
+  Future<void> markAllSchoolNoticesAsRead() async {
+    final unread = _notices.where((n) => !_readNoticeIds.contains(n.id)).map((n) => n.id).toList();
+    if (unread.isEmpty) return;
+    _readNoticeIds.addAll(unread);
+    await _saveReadNoticeIds();
+    notifyListeners();
+    for (final id in unread) {
+      TeacherDataService.markBroadcastRead(id).catchError((_) => false);
+    }
+  }
+
+  Future<void> markAllStaffNoticesAsRead() async {
+    final unread = _staffNotices.where((n) => !_readNoticeIds.contains(n.id)).map((n) => n.id).toList();
+    if (unread.isEmpty) return;
+    _readNoticeIds.addAll(unread);
+    await _saveReadNoticeIds();
+    notifyListeners();
+    for (final id in unread) {
+      TeacherDataService.markBroadcastRead(id).catchError((_) => false);
+    }
+  }
+
+  Future<void> markAllAnnouncementsAsRead() async {
+    final unread = _announcements.where((a) => !_readNoticeIds.contains(a.id)).map((a) => a.id).toList();
+    if (unread.isEmpty) return;
+    _readNoticeIds.addAll(unread);
+    await _saveReadNoticeIds();
+    notifyListeners();
+    for (final id in unread) {
+      TeacherDataService.markBroadcastRead(id).catchError((_) => false);
+    }
+  }
+
+  Future<void> markAllClassUpdatesAsRead() async {
+    final unread = _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).map((u) => u.id).toList();
+    if (unread.isEmpty) return;
+    _readNoticeIds.addAll(unread);
+    await _saveReadNoticeIds();
+    notifyListeners();
+  }
+
   // Academic Year Check Helper (2026-04-01 to 2027-03-31)
   bool _isWithinCurrentAcademicYear(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return true;
@@ -561,6 +643,13 @@ class AppState extends ChangeNotifier {
       final ayAnnouncements = liveAnnouncements
           .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
           .toList();
+
+      // Sync backend read status into local read tracking
+      for (final a in liveAnnouncements) {
+        if (a.isRead) {
+          _readNoticeIds.add(a.id);
+        }
+      }
 
       // Sort newest first by fullDate/date
       ayAnnouncements.sort((a, b) {
@@ -662,6 +751,8 @@ class AppState extends ChangeNotifier {
   // Add Class Announcement with live API Sync to Web Admin Sent Items
   Future<void> addAnnouncement(Announcement ann) async {
     _announcements.insert(0, ann);
+    _readNoticeIds.add(ann.id);
+    await _saveReadNoticeIds();
     notifyListeners();
 
     if (_loggedIn) {
@@ -737,6 +828,8 @@ class AppState extends ChangeNotifier {
   // Add Class Update with live API Sync to Web Admin Sent Items
   Future<void> addClassUpdate(ClassUpdate update) async {
     _classUpdates.insert(0, update);
+    _readNoticeIds.add(update.id);
+    await _saveReadNoticeIds();
     _saveClassUpdates();
     notifyListeners();
 

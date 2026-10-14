@@ -65,6 +65,7 @@ class AllSectionsScreen extends StatelessWidget {
                     : 'Staff circulars',
             'icon': Icons.notifications_none_outlined,
             'route': '/staff-notice',
+            'badgeCount': appState.unreadStaffNoticesCount,
           },
           {
             'name': appState.translate('schoolNotice'),
@@ -75,18 +76,21 @@ class AllSectionsScreen extends StatelessWidget {
                     : 'School circulars',
             'icon': Icons.campaign_outlined,
             'route': '/school-notice',
+            'badgeCount': appState.unreadSchoolNoticesCount,
           },
           {
             'name': appState.translate('classUpdate'),
             'subtitle': appState.translate('homeworkAndClasswork'),
             'icon': Icons.menu_book_outlined,
             'route': '/class-update',
+            'badgeCount': appState.unreadClassUpdatesCount,
           },
           {
             'name': appState.translate('announcement'),
             'subtitle': appState.translate('postUpdates'),
             'icon': Icons.campaign_outlined,
             'route': '/announcement',
+            'badgeCount': appState.unreadAnnouncementsCount,
           },
         ],
       },
@@ -289,14 +293,48 @@ class AllSectionsScreen extends StatelessWidget {
                                     Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withValues(alpha: 0.3),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Icon(f['icon'] as IconData, color: Colors.white, size: 20),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Container(
+                                              width: 36,
+                                              height: 36,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.3),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Icon(f['icon'] as IconData, color: Colors.white, size: 20),
+                                            ),
+                                            if (f['badgeCount'] != null && (f['badgeCount'] as int) > 0)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.red.shade600,
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  boxShadow: const [
+                                                    BoxShadow(
+                                                      color: Colors.black26,
+                                                      blurRadius: 3,
+                                                      offset: Offset(0, 1),
+                                                    )
+                                                  ],
+                                                ),
+                                                constraints: const BoxConstraints(
+                                                  minWidth: 20,
+                                                  minHeight: 20,
+                                                ),
+                                                alignment: Alignment.center,
+                                                child: Text(
+                                                  (f['badgeCount'] as int) > 99 ? '99+' : '${f['badgeCount']}',
+                                                  style: const TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
                                         ),
                                         const SizedBox(height: 10),
                                         Text(

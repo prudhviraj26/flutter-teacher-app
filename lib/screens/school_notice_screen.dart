@@ -62,32 +62,59 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.arrow_back, color: Colors.white),
+                          ),
                         ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
+                        const SizedBox(width: 12),
+                        Text(
+                          appState.language == 'mr'
+                              ? 'शाळेच्या सूचना'
+                              : appState.language == 'hi'
+                                  ? 'स्कूल नोटिस'
+                                  : 'School Notice',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Text(
-                      appState.language == 'mr'
-                          ? 'शाळेच्या सूचना'
-                          : appState.language == 'hi'
-                              ? 'स्कूल नोटिस'
-                              : 'School Notice',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                    if (appState.unreadSchoolNoticesCount > 0)
+                      TextButton.icon(
+                        onPressed: () => appState.markAllSchoolNoticesAsRead(),
+                        icon: const Icon(Icons.done_all, color: Colors.white, size: 16),
+                        label: Text(
+                          appState.language == 'mr'
+                              ? 'सर्व वाचले'
+                              : appState.language == 'hi'
+                                  ? 'सभी पढ़ें'
+                                  : 'Mark all read',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.15),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),

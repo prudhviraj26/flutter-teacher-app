@@ -201,6 +201,7 @@ class Announcement {
   final String scope; // 'Class' | 'School' | 'Staff'
   final String? fullDate;
   final List<String>? attachments;
+  final bool isRead;
 
   Announcement({
     required this.id,
@@ -214,6 +215,7 @@ class Announcement {
     required this.scope,
     this.fullDate,
     this.attachments,
+    this.isRead = false,
   });
 }
 

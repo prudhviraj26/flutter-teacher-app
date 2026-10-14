@@ -16,12 +16,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _mobileController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocusNode = FocusNode();
   bool _isLoading = false;
 
   @override
   void dispose() {
     _mobileController.dispose();
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -95,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ? 'वेहो टेक्नॉलॉजीज'
         : appState.language == 'hi'
             ? 'वेहो टेक्नोलॉजीज'
-            : 'Veyho';
+            : 'Veyho Technologies';
 
     return Scaffold(
       backgroundColor: AppColors.primary,
@@ -139,21 +141,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    orgName,
-                    style: const TextStyle(
-                      color: Color(0xFF1F2937),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+                  const Center(
+                    child: VeyhoLogo(fontSize: 26),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     appState.translate("teacherPortal"),
                     style: const TextStyle(
                       color: Colors.grey,
-                      fontSize: 14,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -172,8 +169,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _mobileController,
                     keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
                     maxLength: 10,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    onSubmitted: (_) {
+                      FocusScope.of(context).requestFocus(_passwordFocusNode);
+                    },
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.phone_android, color: Colors.grey),
                       hintText: appState.translate("enterMobileNumber"),
@@ -206,7 +207,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 6),
                   TextField(
                     controller: _passwordController,
+                    focusNode: _passwordFocusNode,
                     obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _handleLogin(context, appState),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
                       hintText: appState.translate("enterPassword"),
@@ -284,21 +288,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                   
-                  // Veyho Branding
+                  // Company branding footer
                   const SizedBox(height: 16),
                   const Divider(color: Color(0xFFF3F4F6)),
                   const SizedBox(height: 12),
-                  const VeyhoLogo(scale: 0.6),
-                  const SizedBox(height: 6),
                   Text(
-                    appState.language == 'mr'
-                        ? 'वेहो टेक्नॉलॉजीज'
-                        : appState.language == 'hi'
-                            ? 'वेहो टेक्नोलॉजीज'
-                            : 'Veyho Technologies',
+                    orgName,
                     style: const TextStyle(
                       color: Colors.grey,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,

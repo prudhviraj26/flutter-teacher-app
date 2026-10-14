@@ -63,6 +63,7 @@ class CustomBottomNavBar extends StatelessWidget {
                       ? 'नोटिस'
                       : 'Staff Notice',
               isActive: currentRoute == '/staff-notice',
+              badgeCount: appState.unreadStaffNoticesCount,
               onTap: () {
                 if (currentRoute != '/staff-notice') {
                   Navigator.pushNamed(context, '/staff-notice');
@@ -95,6 +96,7 @@ class CustomBottomNavBar extends StatelessWidget {
     required String label,
     required bool isActive,
     required VoidCallback onTap,
+    int badgeCount = 0,
   }) {
     const activeColor = AppColors.primary;
     const inactiveColor = Color(0xFF9CA3AF);
@@ -107,10 +109,18 @@ class CustomBottomNavBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isActive ? activeIcon : icon,
-              color: isActive ? activeColor : inactiveColor,
-              size: 24,
+            Badge(
+              isLabelVisible: badgeCount > 0,
+              label: Text(
+                badgeCount > 99 ? '99+' : '$badgeCount',
+                style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
+              ),
+              backgroundColor: Colors.red.shade600,
+              child: Icon(
+                isActive ? activeIcon : icon,
+                color: isActive ? activeColor : inactiveColor,
+                size: 24,
+              ),
             ),
             const SizedBox(height: 4),
             Text(

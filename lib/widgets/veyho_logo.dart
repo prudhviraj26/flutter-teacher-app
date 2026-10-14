@@ -2,75 +2,75 @@ import 'package:flutter/material.dart';
 
 class VeyhoLogo extends StatelessWidget {
   final double scale;
+  final double? fontSize;
 
   const VeyhoLogo({
     super.key,
     this.scale = 1.0,
+    this.fontSize,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = 48.0 * scale;
+    final effectiveFontSize = fontSize ?? (48.0 * scale);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  'vey',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0A1D6E),
-                    height: 1,
-                  ),
+    return SizedBox(
+      height: effectiveFontSize * 1.5,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                'vey',
+                style: TextStyle(
+                  color: const Color(0xFF0A1D6E),
+                  fontSize: effectiveFontSize,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Inter',
                 ),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Text(
-                      'h',
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1D70B8),
-                        height: 1,
-                      ),
+              ),
+              Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Text(
+                    'h',
+                    style: TextStyle(
+                      color: const Color(0xFF1D70B8),
+                      fontSize: effectiveFontSize,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Inter',
                     ),
-                    Positioned(
-                      top: -fontSize * 0.5,
-                      left: fontSize * 0.05,
-                      child: SizedBox(
-                        width: fontSize * 0.9,
-                        height: fontSize * 0.9,
-                        child: CustomPaint(
-                          painter: SwooshPainter(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Text(
-                  'o',
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF1D70B8),
-                    height: 1,
                   ),
+                  // Curving swoosh arrow positioned above 'h'
+                  Positioned(
+                    top: -effectiveFontSize * 0.45,
+                    left: effectiveFontSize * 0.05,
+                    child: CustomPaint(
+                      size: Size(effectiveFontSize * 0.7, effectiveFontSize * 0.7),
+                      painter: SwooshPainter(),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                'o',
+                style: TextStyle(
+                  color: const Color(0xFF1D70B8),
+                  fontSize: effectiveFontSize,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Inter',
                 ),
-              ],
-            ),
-          ],
-        ),
-      ],
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

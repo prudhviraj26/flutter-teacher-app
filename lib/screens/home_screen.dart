@@ -6,8 +6,35 @@ import '../constants/colors.dart';
 import '../widgets/menu_card.dart';
 import '../widgets/bottom_nav_bar.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) {
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.refreshBroadcasts();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +179,7 @@ class HomeScreen extends StatelessWidget {
                     physics: const NeverScrollableScrollPhysics(),
                     mainAxisSpacing: 16,
                     crossAxisSpacing: 16,
-                    childAspectRatio: 1.15,
+                    childAspectRatio: 1.05,
                     children: [
                       // Announcement
                       MenuCard(
