@@ -102,6 +102,7 @@ class TeacherDataService {
     required String title,
     required String message,
     required String targetType, // 'class' | 'section' | 'school' | 'staff_only'
+    String? broadcastType, // 'school_notice' | 'class_notice' | 'homework' | 'classwork'
     String? targetClassId,
     List<String>? targetClassIds,
     String? targetSectionId,
@@ -113,6 +114,7 @@ class TeacherDataService {
         'title': title,
         'body': message,
         'targetType': targetType,
+        if (broadcastType != null) 'broadcastType': broadcastType,
         'channels': ['in_app', 'push_fcm'],
         if (targetClassId != null) 'targetClassId': targetClassId,
         if (targetClassIds != null) 'targetClassIds': targetClassIds,

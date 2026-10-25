@@ -762,6 +762,7 @@ class AppState extends ChangeNotifier {
           title: ann.title,
           message: ann.message,
           targetType: hasSection ? 'section' : 'school',
+          broadcastType: 'class_notice',
           targetSectionId: hasSection ? _teacher!.sectionId : null,
           attachments: ann.attachments,
         );
@@ -835,13 +836,15 @@ class AppState extends ChangeNotifier {
 
     if (_loggedIn) {
       try {
-        final broadcastTitle = "[${update.type}] ${update.subject}: ${update.title}";
+        final broadcastTitle = "${update.subject}: ${update.title}";
         final broadcastBody = "${update.description}${update.dueDate != null ? '\n\nDue Date: ${update.dueDate}' : ''}";
         final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
+        final broadcastType = update.type.toLowerCase() == 'classwork' ? 'classwork' : 'homework';
         await TeacherDataService.createBroadcast(
           title: broadcastTitle,
           message: broadcastBody,
           targetType: hasSection ? 'section' : 'school',
+          broadcastType: broadcastType,
           targetSectionId: hasSection ? _teacher!.sectionId : null,
           attachments: update.attachments,
         );
