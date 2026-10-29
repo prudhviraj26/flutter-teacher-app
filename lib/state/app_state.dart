@@ -21,7 +21,7 @@ class AppState extends ChangeNotifier {
   List<Announcement> _announcements = [];
   List<ClassUpdate> _classUpdates = [];
   List<DailyAttendance> _attendanceHistory = [];
-  final List<ParentConversation> _parentConversations = [];
+  List<ParentConversation> _parentConversations = [];
   final List<Duty> _duties = [];
   List<StaffNotice> _staffNotices = [];
   List<Notice> _notices = [];
@@ -81,7 +81,7 @@ class AppState extends ChangeNotifier {
       _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).length;
 
   int get unreadParentMessagesCount => _parentConversations
-      .where((c) => c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
+      .where((c) => c.unreadCount > 0 || c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
       .length;
 
   int get totalUnreadCommunicationsCount =>
@@ -276,6 +276,15 @@ class AppState extends ChangeNotifier {
             }
           } catch (hErr) {
             debugPrint("Error fetching live holidays: $hErr");
+          }
+        }(),
+
+        // Pipeline 5: Parent chat conversations (for unread count badge & chat list)
+        () async {
+          try {
+            await fetchParentConversations();
+          } catch (e) {
+            debugPrint("Error fetching parent conversations: $e");
           }
         }(),
       ]);
@@ -749,7 +758,7 @@ class AppState extends ChangeNotifier {
   }
 
   // Add Class Announcement with live API Sync to Web Admin Sent Items
-  Future<void> addAnnouncement(Announcement ann) async {
+  Future<void> addAnnouncement(Announcement ann, {List<dynamic>? rawAttachments}) async {
     _announcements.insert(0, ann);
     _readNoticeIds.add(ann.id);
     await _saveReadNoticeIds();
@@ -764,7 +773,7 @@ class AppState extends ChangeNotifier {
           targetType: hasSection ? 'section' : 'school',
           broadcastType: 'class_notice',
           targetSectionId: hasSection ? _teacher!.sectionId : null,
-          attachments: ann.attachments,
+          attachments: rawAttachments ?? ann.attachments,
         );
         refreshBroadcasts();
       } catch (e) {
@@ -827,7 +836,7 @@ class AppState extends ChangeNotifier {
   }
 
   // Add Class Update with live API Sync to Web Admin Sent Items
-  Future<void> addClassUpdate(ClassUpdate update) async {
+  Future<void> addClassUpdate(ClassUpdate update, {List<dynamic>? rawAttachments}) async {
     _classUpdates.insert(0, update);
     _readNoticeIds.add(update.id);
     await _saveReadNoticeIds();
@@ -846,7 +855,7 @@ class AppState extends ChangeNotifier {
           targetType: hasSection ? 'section' : 'school',
           broadcastType: broadcastType,
           targetSectionId: hasSection ? _teacher!.sectionId : null,
-          attachments: update.attachments,
+          attachments: rawAttachments ?? update.attachments,
         );
       } catch (e) {
         debugPrint("Error syncing class update to API: $e");
@@ -1112,34 +1121,128 @@ class AppState extends ChangeNotifier {
   }
 
   // Parent chats operations
-  void addParentMessage(String parentId, String text, String sender) {
-    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId);
-    if (idx != -1) {
-      final now = DateTime.now();
-      final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
-      
-      final newMessage = ParentMessage(
-        id: "M${now.millisecondsSinceEpoch}",
-        text: text,
-        sender: sender,
-        timestamp: timeStr,
-      );
+  Future<void> fetchParentConversations() async {
+    try {
+      final liveThreads = await TeacherDataService.fetchTeacherChatThreads();
+      if (liveThreads.isNotEmpty) {
+        _parentConversations = liveThreads;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint("Error fetching parent conversations: $e");
+    }
+  }
 
+  void addParentMessage(String parentId, String text, String sender) {
+    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
+    final now = DateTime.now();
+    final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+    
+    final tempId = "temp_${now.millisecondsSinceEpoch}";
+    final newMessage = ParentMessage(
+      id: tempId,
+      text: text,
+      sender: sender,
+      timestamp: timeStr,
+      status: 'sending',
+    );
+
+    if (idx != -1) {
       _parentConversations[idx].messages.add(newMessage);
       _parentConversations[idx].lastMessage = text;
+      _parentConversations[idx].lastMessageAt = now;
       _parentConversations[idx].timeLabel = 'Just now';
       if (sender == 'parent') {
         _parentConversations[idx].unread = true;
+        _parentConversations[idx].unreadCount += 1;
+      }
+      notifyListeners();
+
+      final threadId = _parentConversations[idx].threadId;
+      if (threadId != null && threadId.isNotEmpty && sender == 'teacher') {
+        TeacherDataService.sendTeacherMessage(threadId, text).then((res) {
+          if (res != null && res['id'] != null) {
+            final mIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == tempId);
+            if (mIdx != -1) {
+              _parentConversations[idx].messages[mIdx] = ParentMessage(
+                id: res['id'].toString(),
+                text: text,
+                sender: 'teacher',
+                timestamp: timeStr,
+                status: 'delivered',
+              );
+              notifyListeners();
+            }
+          }
+        }).catchError((e) {
+          debugPrint('Teacher send message error: $e');
+        });
+      }
+    }
+  }
+
+  void markChatAsRead(String parentId) {
+    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
+    if (idx != -1) {
+      _parentConversations[idx].unread = false;
+      _parentConversations[idx].unreadCount = 0;
+      final threadId = _parentConversations[idx].threadId;
+      if (threadId != null && threadId.isNotEmpty) {
+        TeacherDataService.markTeacherThreadRead(threadId).catchError((_) => false);
       }
       notifyListeners();
     }
   }
 
-  void markChatAsRead(String parentId) {
-    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId);
-    if (idx != -1 && _parentConversations[idx].unread) {
-      _parentConversations[idx].unread = false;
-      notifyListeners();
+  Future<void> pollTeacherChatDelta(String threadId) async {
+    final idx = _parentConversations.indexWhere((c) => c.threadId == threadId || c.parentId == threadId);
+    if (idx == -1) return;
+
+    String? latestTime;
+    if (_parentConversations[idx].messages.isNotEmpty) {
+      latestTime = _parentConversations[idx].messages.last.timestamp;
+    }
+
+    try {
+      final res = await TeacherDataService.fetchTeacherThreadMessages(threadId, since: latestTime);
+      final msgsJson = res?['messages'] as List<dynamic>? ?? [];
+      if (msgsJson.isNotEmpty) {
+        for (var m in msgsJson) {
+          final parsed = ParentMessage.fromJson(m as Map<String, dynamic>);
+          final existingIdx = _parentConversations[idx].messages.indexWhere((e) => e.id == parsed.id);
+          if (existingIdx != -1) {
+            _parentConversations[idx].messages[existingIdx] = parsed;
+          } else {
+            _parentConversations[idx].messages.add(parsed);
+          }
+          _parentConversations[idx].lastMessage = parsed.text;
+          try {
+            _parentConversations[idx].lastMessageAt = DateTime.parse(parsed.timestamp);
+          } catch (_) {}
+        }
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> deleteTeacherMessage(String threadId, String messageId) async {
+    final idx = _parentConversations.indexWhere((c) => c.threadId == threadId || c.parentId == threadId);
+    if (idx != -1) {
+      final mIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == messageId);
+      if (mIdx != -1) {
+        final m = _parentConversations[idx].messages[mIdx];
+        _parentConversations[idx].messages[mIdx] = ParentMessage(
+          id: m.id,
+          text: 'This message was deleted',
+          sender: m.sender,
+          timestamp: m.timestamp,
+          readAt: m.readAt,
+          isDeleted: true,
+          status: m.status,
+        );
+        notifyListeners();
+      }
+      TeacherDataService.deleteTeacherMessage(messageId).catchError((_) => false);
     }
   }
 
@@ -1149,7 +1252,7 @@ class AppState extends ChangeNotifier {
   }
 
   void addParentMessageObject(String parentId, ParentMessage message) {
-    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId);
+    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
     if (idx != -1) {
       _parentConversations[idx].messages.add(message);
       _parentConversations[idx].lastMessage = message.text;
@@ -1158,7 +1261,7 @@ class AppState extends ChangeNotifier {
   }
 
   void markMessageAsSent(String parentId, String messageId) {
-    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId);
+    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
     if (idx != -1) {
       final msgIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == messageId);
       if (msgIdx != -1) {

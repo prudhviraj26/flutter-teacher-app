@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import '../models/models.dart';
@@ -97,6 +98,26 @@ class TeacherDataService {
     return [];
   }
 
+  // Upload Attachment via Multipart
+  static Future<Map<String, dynamic>?> uploadAttachment(
+    File file, {
+    void Function(int bytesSent, int totalBytes)? onProgress,
+  }) async {
+    try {
+      final res = await ApiService.uploadMultipart(
+        '/communication/broadcasts/upload-attachment',
+        file: file,
+        onProgress: onProgress,
+      );
+      if (res is Map<String, dynamic>) {
+        return res;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.uploadAttachment error: $e');
+    }
+    return null;
+  }
+
   // Post Broadcast / Class Announcement / Homework from Teacher App
   static Future<bool> createBroadcast({
     required String title,
@@ -106,7 +127,7 @@ class TeacherDataService {
     String? targetClassId,
     List<String>? targetClassIds,
     String? targetSectionId,
-    List<String>? attachments,
+    List<dynamic>? attachments,
     String? scheduledFor,
   }) async {
     try {
@@ -446,5 +467,69 @@ class TeacherDataService {
       attachments: attachments,
       isRead: isRead,
     );
+  }
+
+  // --- Teacher Chat Methods ---
+
+  static Future<List<ParentConversation>> fetchTeacherChatThreads() async {
+    try {
+      final response = await ApiService.get('/communication/chat/teacher/threads');
+      if (response is List) {
+        return response
+            .map((item) => ParentConversation.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error fetching teacher chat threads: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>?> fetchTeacherThreadMessages(String threadId, {String? since}) async {
+    try {
+      final query = since != null ? '?since=${Uri.encodeComponent(since)}' : '';
+      final response = await ApiService.get('/communication/chat/teacher/threads/$threadId/messages$query');
+      if (response is Map<String, dynamic>) {
+        return response;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error fetching thread messages: $e');
+      return null;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> sendTeacherMessage(String threadId, String body) async {
+    try {
+      final response = await ApiService.post('/communication/chat/teacher/threads/$threadId/messages', {
+        'body': body,
+      });
+      if (response is Map<String, dynamic>) {
+        return response;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error sending teacher message: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> markTeacherThreadRead(String threadId) async {
+    try {
+      await ApiService.post('/communication/chat/teacher/threads/$threadId/read', {});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> deleteTeacherMessage(String messageId) async {
+    try {
+      await ApiService.delete('/communication/chat/teacher/messages/$messageId');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

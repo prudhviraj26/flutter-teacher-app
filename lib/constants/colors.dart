@@ -11,6 +11,8 @@ class AppColors {
   static const Color border = Color(0xFFE5E7EB);
   static const Color success = Color(0xFF10B981);
   static const Color destructive = Color(0xFFEF4444);
+  static const Color primaryTeal = Color(0xFF00897B);
+  static const Color textMain = Color(0xFF1F2937);
   
   // Custom theme colors for rows/tiles
   static const Color tileTeal = Color(0xFF00897B);

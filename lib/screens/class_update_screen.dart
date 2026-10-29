@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
 import '../services/attachment_helper.dart';
+import '../services/mobile_compressor.dart';
+import '../services/teacher_data_service.dart';
+import '../widgets/upload_progress_dialog.dart';
 
 class ClassUpdateScreen extends StatefulWidget {
   const ClassUpdateScreen({super.key});
@@ -19,7 +23,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   String _subject = '';
   final TextEditingController _descriptionController = TextEditingController();
   String _filterType = 'All'; // 'All' | 'Homework' | 'Classwork'
-  String? _attachedFile;
+  final List<AttachmentResult> _selectedAttachments = [];
   bool _failedToPost = false;
 
   @override
@@ -36,33 +40,106 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
     super.dispose();
   }
 
+  void _showOversizedFileDialog(AttachmentResult file) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.destructive, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'File Exceeds 60 MB Limit',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'The file "${file.name}" is ${file.sizeInMB.toStringAsFixed(1)} MB, which exceeds the maximum limit of 60 MB per attachment. Please select a smaller file or compress it before attaching.',
+          style: const TextStyle(fontSize: 14, color: AppColors.textMain, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handlePickCamera() async {
+    if (_selectedAttachments.length >= MobileCompressor.maxFilesCount) {
+      _showSnackBar('Maximum ${MobileCompressor.maxFilesCount} attachments allowed', AppColors.destructive);
+      return;
+    }
     final result = await AttachmentHelper.pickFromCamera();
     if (result != null) {
+      if (result.isOversized) {
+        _showOversizedFileDialog(result);
+        return;
+      }
       setState(() {
-        _attachedFile = result.name;
+        _selectedAttachments.add(result);
       });
       _showSnackBar("Attached: ${result.name}", AppColors.success);
     }
   }
 
   Future<void> _handlePickGallery() async {
-    final result = await AttachmentHelper.pickFromGallery();
-    if (result != null) {
-      setState(() {
-        _attachedFile = result.name;
-      });
-      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    final availableSlots = MobileCompressor.maxFilesCount - _selectedAttachments.length;
+    if (availableSlots <= 0) {
+      _showSnackBar('Maximum ${MobileCompressor.maxFilesCount} attachments allowed', AppColors.destructive);
+      return;
+    }
+    final results = await AttachmentHelper.pickMultipleFromGallery();
+    if (results.isNotEmpty) {
+      final oversized = results.where((r) => r.isOversized).toList();
+      final valid = results.where((r) => !r.isOversized).toList();
+      if (oversized.isNotEmpty) {
+        _showOversizedFileDialog(oversized.first);
+      }
+      if (valid.isNotEmpty) {
+        final toAdd = valid.take(availableSlots).toList();
+        setState(() {
+          _selectedAttachments.addAll(toAdd);
+        });
+        if (valid.length > availableSlots) {
+          _showSnackBar("Added ${toAdd.length} files (limit of 20 reached)", AppColors.secondary);
+        } else {
+          _showSnackBar("Attached ${toAdd.length} image${toAdd.length == 1 ? '' : 's'}", AppColors.success);
+        }
+      }
     }
   }
 
   Future<void> _handlePickFileManager() async {
-    final result = await AttachmentHelper.pickFromFileManager();
-    if (result != null) {
-      setState(() {
-        _attachedFile = result.name;
-      });
-      _showSnackBar("Attached: ${result.name}", AppColors.success);
+    final availableSlots = MobileCompressor.maxFilesCount - _selectedAttachments.length;
+    if (availableSlots <= 0) {
+      _showSnackBar('Maximum ${MobileCompressor.maxFilesCount} attachments allowed', AppColors.destructive);
+      return;
+    }
+    final results = await AttachmentHelper.pickMultipleFromFileManager();
+    if (results.isNotEmpty) {
+      final oversized = results.where((r) => r.isOversized).toList();
+      final valid = results.where((r) => !r.isOversized).toList();
+      if (oversized.isNotEmpty) {
+        _showOversizedFileDialog(oversized.first);
+      }
+      if (valid.isNotEmpty) {
+        final toAdd = valid.take(availableSlots).toList();
+        setState(() {
+          _selectedAttachments.addAll(toAdd);
+        });
+        if (valid.length > availableSlots) {
+          _showSnackBar("Added ${toAdd.length} files (limit of 20 reached)", AppColors.secondary);
+        } else {
+          _showSnackBar("Attached ${toAdd.length} file${toAdd.length == 1 ? '' : 's'}", AppColors.success);
+        }
+      }
     }
   }
 
@@ -79,7 +156,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
     );
   }
 
-  void _handlePost(AppState appState) {
+  Future<void> _handlePost(AppState appState) async {
     final description = _descriptionController.text;
 
     if (_classSection.isEmpty) {
@@ -105,6 +182,95 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       return;
     }
 
+    final List<Map<String, dynamic>> uploadedAttachmentMeta = [];
+    final List<String> attachmentNames = [];
+
+    // Compress & upload attachments with dynamic progress dialog
+    if (_selectedAttachments.isNotEmpty) {
+      final totalFiles = _selectedAttachments.length;
+      final fileIndexNotifier = ValueNotifier<int>(1);
+      final progressNotifier = ValueNotifier<double>(0.0);
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AnimatedBuilder(
+            animation: Listenable.merge([fileIndexNotifier, progressNotifier]),
+            builder: (ctx, _) {
+              return UploadProgressDialog(
+                fileIndex: fileIndexNotifier.value,
+                totalFiles: totalFiles,
+                progress: progressNotifier.value,
+              );
+            },
+          );
+        },
+      );
+
+      try {
+        for (int i = 0; i < totalFiles; i++) {
+          final att = _selectedAttachments[i];
+          fileIndexNotifier.value = i + 1;
+          attachmentNames.add(att.name);
+
+          // 1. Client-side compression (0% - 40% of this file)
+          final file = File(att.path);
+          final compResult = await MobileCompressor.compressAttachment(
+            file,
+            onProgress: (p) {
+              final overall = (i + (p * 0.4)) / totalFiles;
+              progressNotifier.value = overall;
+            },
+          );
+
+          // 2. Upload compressed file (40% - 100% of this file)
+          final uploadRes = await TeacherDataService.uploadAttachment(
+            compResult.file,
+            onProgress: (sent, total) {
+              if (total > 0) {
+                final fileP = sent / total;
+                final overall = (i + 0.4 + (fileP * 0.6)) / totalFiles;
+                progressNotifier.value = overall;
+              }
+            },
+          );
+
+          // 3. Upload thumbnail if generated (images/videos)
+          String? thumbBlobPath;
+          String? thumbUrl;
+          if (compResult.thumbnailFile != null) {
+            try {
+              final thumbRes = await TeacherDataService.uploadAttachment(compResult.thumbnailFile!);
+              if (thumbRes != null) {
+                thumbBlobPath = thumbRes['blobPath']?.toString();
+                thumbUrl = thumbRes['readUrl']?.toString();
+              }
+            } catch (_) {}
+          }
+
+          if (uploadRes != null) {
+            uploadedAttachmentMeta.add({
+              'name': att.name,
+              'blobPath': uploadRes['blobPath'],
+              'sizeBytes': compResult.compressedSizeBytes,
+              'contentType': uploadRes['contentType'] ?? 'application/octet-stream',
+              'type': compResult.type,
+              if (thumbBlobPath != null) 'thumbnailBlobPath': thumbBlobPath,
+              if (thumbUrl != null) 'thumbnailUrl': thumbUrl,
+            });
+          }
+          progressNotifier.value = (i + 1) / totalFiles;
+        }
+      } catch (e) {
+        debugPrint('Error uploading attachments: $e');
+      } finally {
+        if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+      }
+    }
+
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
     final dueDateTime = now.add(const Duration(days: 2));
@@ -124,22 +290,28 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       teacherId: appState.teacher?.id ?? "T001",
       teacherName: appState.teacher?.name ?? "Teacher",
       dueDate: _type == 'Homework' ? dueDateStr : null,
-      attachments: _attachedFile != null ? [_attachedFile!] : null,
+      attachments: attachmentNames.isNotEmpty ? attachmentNames : null,
       date: dateStr,
     );
 
-    appState.addClassUpdate(newUpdate);
-    _showSnackBar(appState.translate('updatePosted'), AppColors.success);
+    await appState.addClassUpdate(
+      newUpdate,
+      rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
+    );
 
-    // Clear
-    _descriptionController.clear();
-    setState(() {
-      _classSection = '';
-      _subject = '';
-      _attachedFile = null;
-      _showPostForm = false;
-      _failedToPost = false;
-    });
+    if (mounted) {
+      _showSnackBar(appState.translate('updatePosted'), AppColors.success);
+
+      // Clear
+      _descriptionController.clear();
+      setState(() {
+        _classSection = '';
+        _subject = '';
+        _selectedAttachments.clear();
+        _showPostForm = false;
+        _failedToPost = false;
+      });
+    }
   }
 
   void _handleRetry(AppState appState) {
@@ -467,10 +639,34 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         ),
                         const SizedBox(height: 16),
                         
-                        // Attachments Row
-                        const Text(
-                          'Attachments',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                        // Attachments Header & Counter (max 20)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Attachments',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _selectedAttachments.length >= 20
+                                    ? AppColors.destructive.withValues(alpha: 0.1)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${_selectedAttachments.length}/20',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: _selectedAttachments.length >= 20
+                                      ? AppColors.destructive
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -482,40 +678,63 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                             _buildAttachButton(Icons.folder_open_outlined, 'File Manager', _handlePickFileManager),
                           ],
                         ),
-                        
-                        if (_attachedFile != null) ...[
-                          const SizedBox(height: 16),
-                          Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF9FAFB),
-                              border: Border.all(color: const Color(0xFFE5E7EB)),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(
-                                      AttachmentHelper.getFileIcon(_attachedFile!),
-                                      color: AttachmentHelper.getFileColor(_attachedFile!),
+
+                        // Selected Attachments List
+                        if (_selectedAttachments.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ..._selectedAttachments.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final file = entry.value;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    AttachmentHelper.getFileIcon(file.name),
+                                    color: AttachmentHelper.getFileColor(file.name),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          file.name,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textMain,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (file.sizeBytes > 0)
+                                          Text(
+                                            '${file.sizeInMB.toStringAsFixed(1)} MB',
+                                            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                          ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(_attachedFile!, style: const TextStyle(fontSize: 12)),
-                                  ],
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  onPressed: () {
-                                    setState(() {
-                                      _attachedFile = null;
-                                    });
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.close, size: 18, color: AppColors.textMuted),
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedAttachments.removeAt(idx);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                         const SizedBox(height: 20),
                         

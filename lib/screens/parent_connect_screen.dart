@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
@@ -15,6 +16,7 @@ class ParentConnectScreen extends StatefulWidget {
 class _ParentConnectScreenState extends State<ParentConnectScreen> {
   String _searchQuery = '';
   String _newChatSearchQuery = '';
+  String _activeFilter = 'all'; // 'all' or 'unread'
 
   @override
   void initState() {
@@ -325,21 +327,24 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
     }
 
     // Class Teacher view
+    final unreadTotal = appState.unreadParentMessagesCount;
+
     final conversations = appState.parentConversations.where((c) {
       final q = _searchQuery.toLowerCase();
-      return c.parentName.toLowerCase().contains(q) ||
+      final matchesSearch = c.parentName.toLowerCase().contains(q) ||
           c.studentName.toLowerCase().contains(q);
+      if (!matchesSearch) return false;
+      if (_activeFilter == 'unread') {
+        return c.unreadCount > 0 || c.unread;
+      }
+      return true;
     }).toList();
 
-    // Sort: unread/failed first, then custom list index order
+    // Sort strictly descending by lastMessageAt
     conversations.sort((a, b) {
-      final aLatestFailed = a.messages.isNotEmpty && a.messages.last.failed;
-      final bLatestFailed = b.messages.isNotEmpty && b.messages.last.failed;
-      final aHasBadge = a.unread || aLatestFailed;
-      final bHasBadge = b.unread || bLatestFailed;
-      if (aHasBadge && !bHasBadge) return -1;
-      if (!aHasBadge && bHasBadge) return 1;
-      return 0;
+      final aTime = a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bTime = b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bTime.compareTo(aTime);
     });
 
     return Scaffold(
@@ -350,7 +355,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
               // Header & Search
               Container(
                 color: AppColors.secondary,
-                padding: const EdgeInsets.fromLTRB(24, 48, 24, 20),
+                padding: const EdgeInsets.fromLTRB(24, 48, 24, 16),
                 child: Column(
                   children: [
                     Row(
@@ -399,6 +404,27 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+
+                    // Filter Chips: All & Unread
+                    Row(
+                      children: [
+                        _buildFilterChip(
+                          label: 'All',
+                          count: appState.parentConversations.length,
+                          isSelected: _activeFilter == 'all',
+                          onTap: () => setState(() => _activeFilter = 'all'),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildFilterChip(
+                          label: 'Unread',
+                          count: unreadTotal,
+                          isSelected: _activeFilter == 'unread',
+                          showCountBadge: true,
+                          onTap: () => setState(() => _activeFilter = 'unread'),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -419,7 +445,8 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                         itemBuilder: (context, index) {
                           final c = conversations[index];
                           final hasFailed = c.messages.isNotEmpty && c.messages.last.failed;
-                          final isHighlight = c.unread || hasFailed;
+                          final isUnread = c.unreadCount > 0 || c.unread;
+                          final isHighlight = isUnread || hasFailed;
 
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 12),
@@ -428,7 +455,8 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                 color: isHighlight ? const Color(0xFFFFFBEB) : Colors.white,
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: isHighlight ? AppColors.secondary.withValues(alpha: 0.2) : Colors.transparent,
+                                  color: isHighlight ? AppColors.secondary.withValues(alpha: 0.35) : Colors.transparent,
+                                  width: isHighlight ? 1.5 : 1,
                                 ),
                                 boxShadow: const [
                                   BoxShadow(
@@ -439,7 +467,10 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                 ],
                               ),
                               child: InkWell(
-                                onTap: () => Navigator.pushNamed(context, '/parent-connect/chat/${c.parentId}'),
+                                onTap: () {
+                                  appState.markChatAsRead(c.parentId);
+                                  Navigator.pushNamed(context, '/parent-connect/chat/${c.parentId}');
+                                },
                                 borderRadius: BorderRadius.circular(20),
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
@@ -498,22 +529,44 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                                 Expanded(
                                                   child: Text(
                                                     c.parentName,
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.bold,
+                                                    style: TextStyle(
+                                                      fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
                                                       fontSize: 14,
-                                                      color: Color(0xFF1F2937),
+                                                      color: const Color(0xFF1F2937),
                                                     ),
                                                     maxLines: 1,
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                Text(
-                                                  c.timeLabel ?? 'Recent',
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isHighlight ? AppColors.secondary : Colors.grey,
-                                                  ),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      c.timeLabel ?? 'Recent',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isHighlight ? AppColors.secondary : Colors.grey,
+                                                      ),
+                                                    ),
+                                                    if (c.unreadCount > 0)
+                                                      Container(
+                                                        margin: const EdgeInsets.only(top: 4),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: AppColors.secondary,
+                                                          borderRadius: BorderRadius.circular(10),
+                                                        ),
+                                                        child: Text(
+                                                          '${c.unreadCount} new',
+                                                          style: const TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 9,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
@@ -631,6 +684,60 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
       ),
     );
   }
+
+  Widget _buildFilterChip({
+    required String label,
+    required int count,
+    required bool isSelected,
+    bool showCountBadge = false,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppColors.secondary : Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+            if (showCountBadge && count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? AppColors.secondary : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  count.toString(),
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.secondary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 10,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class ParentChatScreen extends StatefulWidget {
@@ -649,6 +756,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _isAttachmentOpen = false;
+  Timer? _pollingTimer;
 
   @override
   void initState() {
@@ -659,10 +767,21 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       appState.markChatAsRead(widget.parentId);
       _scrollToBottom();
     });
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.pollTeacherChatDelta(widget.parentId);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -679,34 +798,75 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   }
 
   void _sendMessage(AppState appState) {
-    final text = _msgController.text;
-    if (text.trim().isEmpty) return;
+    final text = _msgController.text.trim();
+    if (text.isEmpty) return;
 
-    appState.addParentMessage(widget.parentId, text, 'teacher');
-    _msgController.clear();
-    _scrollToBottom();
-
-    // Trigger retry flow simulation if user typed "fail"
-    if (text.toLowerCase().contains('fail')) {
-      final conv = appState.parentConversations.firstWhere((c) => c.parentId == widget.parentId);
-      if (conv.messages.isNotEmpty) {
-        setState(() {
-          conv.messages.last.failed = true;
-        });
-      }
+    if (text.length > 1000) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Message transmission failed!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Message cannot exceed 1000 characters')),
       );
       return;
     }
 
-    // Dynamic parent reply
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) {
-        appState.addParentMessage(widget.parentId, 'Okay, thank you for the update! I will coordinate this.', 'parent');
-        _scrollToBottom();
-      }
-    });
+    appState.addParentMessage(widget.parentId, text, 'teacher');
+    _msgController.clear();
+    _scrollToBottom();
+  }
+
+  void _confirmDeleteMessage(AppState appState, ParentMessage msg) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Message', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: const Text(
+          'Are you sure you want to delete this message? This will delete the message for everyone in this conversation.',
+          style: TextStyle(fontSize: 13, color: Color(0xFF4B5563)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              appState.deleteTeacherMessage(widget.parentId, msg.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Message deleted')),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Delete for Everyone', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTickIcon(ParentMessage msg) {
+    if (msg.isRead) {
+      return const Icon(
+        Icons.done_all,
+        size: 13,
+        color: Color(0xFF0284C7), // WhatsApp Sky Blue Read tick
+      );
+    }
+    if (msg.status == 'delivered') {
+      return const Icon(
+        Icons.done_all,
+        size: 13,
+        color: Colors.white70,
+      );
+    }
+    return Icon(
+      msg.status == 'sending' ? Icons.access_time : Icons.done,
+      size: 13,
+      color: Colors.white70,
+    );
   }
 
   Future<void> _handleAttachCamera(AppState appState) async {
@@ -773,11 +933,11 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final conv = appState.parentConversations.firstWhere(
-      (c) => c.parentId == widget.parentId,
+      (c) => c.parentId == widget.parentId || c.threadId == widget.parentId,
       orElse: () => ParentConversation(parentId: '', parentName: 'Unknown', studentName: '', studentClass: '', mobile: '', lastMessage: '', messages: []),
     );
 
-    if (conv.parentId.isEmpty) {
+    if (conv.parentId.isEmpty && conv.studentName.isEmpty) {
       return Scaffold(
         body: Center(
           child: Text(appState.translate('noData')),
@@ -932,109 +1092,152 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                   );
                 }
 
+                if (msg.isDeleted) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Align(
+                      alignment: isTeacher ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.block_outlined, size: 14, color: Colors.grey.shade600),
+                            const SizedBox(width: 6),
+                            Text(
+                              'This message was deleted',
+                              style: TextStyle(
+                                fontStyle: FontStyle.italic,
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              msg.timestamp,
+                              style: TextStyle(fontSize: 8, color: Colors.grey.shade400),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
                 // Normal messages
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Align(
                     alignment: isTeacher ? Alignment.centerRight : Alignment.centerLeft,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isTeacher ? AppColors.secondary : Colors.white,
-                        borderRadius: isTeacher
-                            ? const BorderRadius.only(
-                                topLeft: Radius.circular(16),
-                                bottomLeft: Radius.circular(16),
-                                bottomRight: Radius.circular(16),
-                                topRight: Radius.circular(4),
+                    child: GestureDetector(
+                      onLongPress: (!msg.isDeleted && isTeacher)
+                          ? () => _confirmDeleteMessage(appState, msg)
+                          : null,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: isTeacher ? AppColors.secondary : Colors.white,
+                          borderRadius: isTeacher
+                              ? const BorderRadius.only(
+                                  topLeft: Radius.circular(16),
+                                  bottomLeft: Radius.circular(16),
+                                  bottomRight: Radius.circular(16),
+                                  topRight: Radius.circular(4),
+                                )
+                              : const BorderRadius.only(
+                                  topRight: Radius.circular(16),
+                                  bottomRight: Radius.circular(16),
+                                  bottomLeft: Radius.circular(16),
+                                  topLeft: Radius.circular(4),
+                                ),
+                          border: isTeacher ? null : Border.all(color: const Color(0xFFF3F4F6)),
+                          boxShadow: const [
+                            BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))
+                          ],
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (msg.isAttachment)
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.all(10),
+                                child: Row(
+                                  children: [
+                                    CircleAvatar(
+                                      backgroundColor: Colors.white,
+                                      radius: 16,
+                                      child: Icon(
+                                        AttachmentHelper.getFileIcon(msg.attachmentName!),
+                                        color: AttachmentHelper.getFileColor(msg.attachmentName!),
+                                        size: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            msg.attachmentName!,
+                                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const Text('PDF Document • 1.2 MB', style: TextStyle(color: Colors.white70, fontSize: 8)),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.download, color: Colors.white, size: 16),
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Downloading ${msg.attachmentName}...')),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
                               )
-                            : const BorderRadius.only(
-                                topRight: Radius.circular(16),
-                                bottomRight: Radius.circular(16),
-                                bottomLeft: Radius.circular(16),
-                                topLeft: Radius.circular(4),
-                              ),
-                        border: isTeacher ? null : Border.all(color: const Color(0xFFF3F4F6)),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))
-                        ],
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (msg.isAttachment)
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.all(10),
-                              child: Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: Colors.white,
-                                    radius: 16,
-                                    child: Icon(
-                                      AttachmentHelper.getFileIcon(msg.attachmentName!),
-                                      color: AttachmentHelper.getFileColor(msg.attachmentName!),
-                                      size: 16,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          msg.attachmentName!,
-                                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const Text('PDF Document • 1.2 MB', style: TextStyle(color: Colors.white70, fontSize: 8)),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.download, color: Colors.white, size: 16),
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Downloading ${msg.attachmentName}...')),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            Text(
-                              msg.text,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isTeacher ? Colors.white : const Color(0xFF374151),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+                            else
                               Text(
-                                msg.timestamp,
+                                msg.text,
                                 style: TextStyle(
-                                  fontSize: 8,
-                                  color: isTeacher ? Colors.white70 : Colors.grey,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: isTeacher ? Colors.white : const Color(0xFF374151),
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              if (isTeacher && index == conv.messages.length - 1) ...[
-                                const SizedBox(width: 4),
-                                const Icon(Icons.done_all, size: 12, color: Colors.blue),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  msg.timestamp,
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: isTeacher ? Colors.white70 : Colors.grey,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                if (isTeacher) ...[
+                                  const SizedBox(width: 4),
+                                  _buildTickIcon(msg),
+                                ],
                               ],
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1068,9 +1271,23 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _msgController,
+                      maxLength: 1000,
+                      buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
+                        if (currentLength > 800) {
+                          return Text(
+                            '$currentLength / $maxLength',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: currentLength >= 1000 ? Colors.red : Colors.orange,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          );
+                        }
+                        return null;
+                      },
                       style: const TextStyle(fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: "Type a message... (Type 'fail' to test retry)",
+                        hintText: "Type a message (max 1000 chars)...",
                         fillColor: const Color(0xFFF5F7FA),
                         filled: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

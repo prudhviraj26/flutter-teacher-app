@@ -357,6 +357,9 @@ class ParentMessage {
   final bool isAttachment;
   final String? attachmentName;
   bool failed;
+  final String? readAt;
+  final bool isDeleted;
+  final String status; // 'sending' | 'sent' | 'delivered' | 'read'
 
   ParentMessage({
     required this.id,
@@ -366,7 +369,54 @@ class ParentMessage {
     this.isAttachment = false,
     this.attachmentName,
     this.failed = false,
+    this.readAt,
+    this.isDeleted = false,
+    this.status = 'sent',
   });
+
+  bool get isRead => readAt != null || status == 'read';
+
+  factory ParentMessage.fromJson(Map<String, dynamic> json) {
+    final senderType = (json['sender'] ?? json['senderType'] ?? 'teacher').toString();
+    final bodyText = (json['text'] ?? json['body'] ?? '').toString();
+    final readAtStr = json['readAt']?.toString();
+    final isDel = json['isDeleted'] as bool? ?? false;
+
+    String status = 'sent';
+    if (readAtStr != null && readAtStr.isNotEmpty) {
+      status = 'read';
+    } else {
+      status = 'delivered';
+    }
+
+    return ParentMessage(
+      id: (json['id'] ?? '').toString(),
+      text: bodyText,
+      sender: senderType,
+      timestamp: (json['timestamp'] ?? json['createdAt'] ?? '').toString(),
+      isAttachment: json['isAttachment'] as bool? ?? false,
+      attachmentName: json['attachmentName'] as String?,
+      failed: json['failed'] as bool? ?? false,
+      readAt: readAtStr,
+      isDeleted: isDel,
+      status: status,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'text': text,
+      'sender': sender,
+      'timestamp': timestamp,
+      'isAttachment': isAttachment,
+      'attachmentName': attachmentName,
+      'failed': failed,
+      'readAt': readAt,
+      'isDeleted': isDeleted,
+      'status': status,
+    };
+  }
 }
 
 class ParentConversation {
@@ -379,6 +429,10 @@ class ParentConversation {
   final List<ParentMessage> messages;
   String? timeLabel;
   bool unread;
+  String? threadId;
+  String? studentId;
+  DateTime? lastMessageAt;
+  int unreadCount;
 
   ParentConversation({
     required this.parentId,
@@ -390,7 +444,65 @@ class ParentConversation {
     required this.messages,
     this.timeLabel,
     this.unread = false,
+    this.threadId,
+    this.studentId,
+    this.lastMessageAt,
+    this.unreadCount = 0,
   });
+
+  factory ParentConversation.fromJson(Map<String, dynamic> json) {
+    var msgsJson = json['messages'] as List<dynamic>?;
+    List<ParentMessage> msgs = msgsJson != null
+        ? msgsJson.map((e) => ParentMessage.fromJson(e as Map<String, dynamic>)).toList()
+        : [];
+
+    DateTime? lAt;
+    if (json['lastMessageAt'] != null) {
+      try {
+        lAt = DateTime.parse(json['lastMessageAt'].toString());
+      } catch (_) {}
+    } else if (msgs.isNotEmpty) {
+      try {
+        lAt = DateTime.parse(msgs.last.timestamp);
+      } catch (_) {}
+    }
+
+    final uCount = json['teacherUnreadCount'] as int? ?? json['unreadCount'] as int? ?? 0;
+
+    return ParentConversation(
+      parentId: (json['parentId'] ?? json['parentContactId'] ?? '').toString(),
+      parentName: (json['parentName'] ?? 'Parent').toString(),
+      studentName: (json['studentName'] ?? 'Student').toString(),
+      studentClass: (json['studentClass'] ?? '').toString(),
+      mobile: (json['mobile'] ?? '').toString(),
+      lastMessage: (json['lastMessage'] ?? '').toString(),
+      messages: msgs,
+      timeLabel: json['timeLabel'] as String?,
+      unread: uCount > 0 || (json['unread'] as bool? ?? false),
+      threadId: json['threadId']?.toString() ?? json['id']?.toString(),
+      studentId: json['studentId']?.toString(),
+      lastMessageAt: lAt,
+      unreadCount: uCount,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'parentId': parentId,
+      'parentName': parentName,
+      'studentName': studentName,
+      'studentClass': studentClass,
+      'mobile': mobile,
+      'lastMessage': lastMessage,
+      'messages': messages.map((e) => e.toJson()).toList(),
+      'timeLabel': timeLabel,
+      'unread': unread,
+      'threadId': threadId,
+      'studentId': studentId,
+      'lastMessageAt': lastMessageAt?.toIso8601String(),
+      'unreadCount': unreadCount,
+    };
+  }
 }
 
 class Duty {

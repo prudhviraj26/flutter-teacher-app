@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -174,6 +176,104 @@ class ApiService {
       final refreshed = await refreshTokenSilently();
       if (refreshed) {
         return await patch(endpoint, body, requireAuth: requireAuth, isRetry: true);
+      }
+    }
+    return _processResponse(response);
+  }
+
+  // DELETE Request with Auto-Token Refresh Retry
+  static Future<dynamic> delete(
+    String endpoint, {
+    bool requireAuth = true,
+    bool isRetry = false,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await _getHeaders(requireAuth: requireAuth);
+
+    final http.Response response;
+    try {
+      response = await http.delete(url, headers: headers);
+    } catch (e) {
+      throw Exception('Unable to connect to server. Please check your internet connection.');
+    }
+
+    if (response.statusCode == 401 && requireAuth && !isRetry) {
+      final refreshed = await refreshTokenSilently();
+      if (refreshed) {
+        return await delete(endpoint, requireAuth: requireAuth, isRetry: true);
+      }
+    }
+    return _processResponse(response);
+  }
+
+  // Upload Multipart File (with upload progress tracking)
+  static Future<dynamic> uploadMultipart(
+    String endpoint, {
+    required File file,
+    String fieldName = 'file',
+    bool requireAuth = true,
+    bool isRetry = false,
+    void Function(int bytesSent, int totalBytes)? onProgress,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final request = http.MultipartRequest('POST', url);
+
+    if (requireAuth) {
+      final token = await getToken();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    final int fileLength = await file.length();
+    final filename = file.path.split(Platform.pathSeparator).last;
+
+    if (onProgress != null) {
+      final stream = file.openRead();
+      int bytesSent = 0;
+      final byteStream = stream.transform(
+        StreamTransformer<List<int>, List<int>>.fromHandlers(
+          handleData: (data, sink) {
+            bytesSent += data.length;
+            sink.add(data);
+            onProgress(bytesSent, fileLength);
+          },
+        ),
+      );
+      request.files.add(
+        http.MultipartFile(
+          fieldName,
+          byteStream,
+          fileLength,
+          filename: filename,
+        ),
+      );
+    } else {
+      request.files.add(
+        await http.MultipartFile.fromPath(fieldName, file.path, filename: filename),
+      );
+    }
+
+    final http.StreamedResponse streamedResponse;
+    try {
+      streamedResponse = await request.send();
+    } catch (e) {
+      throw Exception('Unable to connect to server. Please check your internet connection.');
+    }
+
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 401 && requireAuth && !isRetry) {
+      final refreshed = await refreshTokenSilently();
+      if (refreshed) {
+        return await uploadMultipart(
+          endpoint,
+          file: file,
+          fieldName: fieldName,
+          requireAuth: requireAuth,
+          isRetry: true,
+          onProgress: onProgress,
+        );
       }
     }
     return _processResponse(response);
