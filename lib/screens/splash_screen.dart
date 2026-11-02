@@ -1,3 +1,4 @@
+import '../services/notification_navigation_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -57,6 +58,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             );
           } else {
             Navigator.pushReplacementNamed(context, '/home');
+            NotificationNavigationService.checkInitialNotification();
+            NotificationNavigationService.requestPermissionAndRegister();
           }
         } else {
           Navigator.pushReplacementNamed(context, '/login');

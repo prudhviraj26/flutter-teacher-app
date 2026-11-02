@@ -1,3 +1,4 @@
+import '../services/notification_navigation_service.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -499,18 +500,7 @@ class AppState extends ChangeNotifier {
   Future<void> _registerDeviceToken() async {
     if (!_loggedIn) return;
     try {
-      String? token = _prefs?.getString('veyho_device_token');
-      if (token == null || token.isEmpty) {
-        token = "fcm_${_teacher?.employeeId ?? 'teacher'}_${DateTime.now().millisecondsSinceEpoch}";
-        await _prefs?.setString('veyho_device_token', token);
-      }
-      await TeacherDataService.registerDeviceToken(
-        deviceToken: token,
-        platform: 'android',
-        deviceModel: 'Android Emulator / Device',
-        osVersion: 'Android 14 (API 34/36)',
-        appVersion: '1.0.0',
-      );
+      await NotificationNavigationService.requestPermissionAndRegister();
     } catch (e) {
       debugPrint("Device token registration error: $e");
     }
@@ -518,10 +508,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> _removeDeviceToken() async {
     try {
-      final token = _prefs?.getString('veyho_device_token');
-      if (token != null && token.isNotEmpty) {
-        await TeacherDataService.removeDeviceToken(token);
-      }
+      await NotificationNavigationService.unregisterDeviceToken();
+      await _prefs?.remove('veyho_device_token');
     } catch (e) {
       debugPrint("Device token removal error: $e");
     }

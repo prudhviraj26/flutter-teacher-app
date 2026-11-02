@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "1009961678874",
+    "project_id": "veyho-school",
+    "storage_bucket": "veyho-school.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1009961678874:android:ae196f3b7b2740899239a3",
+        "android_client_info": {
+          "package_name": "com.schoolparent.school_parent_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD11rkx9HL8dlkqnSibvu7MVb4m8_3g3jE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1009961678874:android:fe9080508282d36d9239a3",
+        "android_client_info": {
+          "package_name": "com.veyho.teacher"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD11rkx9HL8dlkqnSibvu7MVb4m8_3g3jE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

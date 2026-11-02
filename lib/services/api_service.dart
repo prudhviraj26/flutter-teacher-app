@@ -296,7 +296,14 @@ class ApiService {
     } else {
       String errorMessage = 'An error occurred';
       if (jsonBody is Map<String, dynamic>) {
-        errorMessage = jsonBody['message']?.toString() ?? jsonBody['error']?.toString() ?? errorMessage;
+        final msg = jsonBody['message'];
+        if (msg is List && msg.isNotEmpty) {
+          errorMessage = msg.map((m) => m.toString()).join(', ');
+        } else if (msg != null && msg.toString().trim().isNotEmpty) {
+          errorMessage = msg.toString();
+        } else if (jsonBody['error'] != null && jsonBody['error'].toString().trim().isNotEmpty) {
+          errorMessage = jsonBody['error'].toString();
+        }
       }
       throw Exception(errorMessage);
     }

@@ -1,3 +1,4 @@
+import 'services/notification_navigation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'state/app_state.dart';
@@ -30,6 +31,7 @@ class TeacherApp extends StatelessWidget {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return MaterialApp(
+          navigatorKey: NotificationNavigationService.navigatorKey,
           title: 'School Teacher App',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(

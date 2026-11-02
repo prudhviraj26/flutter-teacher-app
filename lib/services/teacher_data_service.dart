@@ -166,17 +166,25 @@ class TeacherDataService {
   static Future<bool> registerDeviceToken({
     required String deviceToken,
     String platform = 'android',
+    String? deviceUuid,
     String? deviceModel,
+    String? deviceManufacturer,
     String? osVersion,
     String? appVersion,
+    String? locale,
+    String? timezone,
   }) async {
     try {
       final res = await ApiService.post('/communication/device-token', {
         'deviceToken': deviceToken,
         'platform': platform,
+        if (deviceUuid != null) 'deviceUuid': deviceUuid,
         if (deviceModel != null) 'deviceModel': deviceModel,
+        if (deviceManufacturer != null) 'deviceManufacturer': deviceManufacturer,
         if (osVersion != null) 'osVersion': osVersion,
         if (appVersion != null) 'appVersion': appVersion,
+        if (locale != null) 'locale': locale,
+        if (timezone != null) 'timezone': timezone,
       });
       return res != null;
     } catch (e) {
