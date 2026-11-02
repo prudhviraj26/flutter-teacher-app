@@ -761,10 +761,11 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   @override
   void initState() {
     super.initState();
-    // Mark conversation read on enter
+    // Mark conversation read on enter & fetch initial messages
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<AppState>(context, listen: false);
       appState.markChatAsRead(widget.parentId);
+      appState.fetchTeacherThreadMessages(widget.parentId);
       _scrollToBottom();
     });
     _startPolling();
@@ -845,6 +846,18 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
         ],
       ),
     );
+  }
+
+  String _formatMsgTime(String ts) {
+    if (ts.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(ts);
+      final hour12 = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      return "$hour12:${dt.minute.toString().padLeft(2, '0')} $period";
+    } catch (_) {
+      return ts;
+    }
   }
 
   Widget _buildTickIcon(ParentMessage msg) {
@@ -1065,7 +1078,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  msg.timestamp,
+                                  _formatMsgTime(msg.timestamp),
                                   style: TextStyle(fontSize: 9, color: Colors.red.shade300, fontWeight: FontWeight.bold),
                                 ),
                               ],
@@ -1120,7 +1133,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              msg.timestamp,
+                              _formatMsgTime(msg.timestamp),
                               style: TextStyle(fontSize: 8, color: Colors.grey.shade400),
                             ),
                           ],
@@ -1223,7 +1236,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  msg.timestamp,
+                                  _formatMsgTime(msg.timestamp),
                                   style: TextStyle(
                                     fontSize: 8,
                                     color: isTeacher ? Colors.white70 : Colors.grey,

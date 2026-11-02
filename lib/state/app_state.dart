@@ -1146,9 +1146,9 @@ class AppState extends ChangeNotifier {
       }
       notifyListeners();
 
-      final threadId = _parentConversations[idx].threadId;
-      if (threadId != null && threadId.isNotEmpty && sender == 'teacher') {
-        TeacherDataService.sendTeacherMessage(threadId, text).then((res) {
+      final realThreadId = _parentConversations[idx].threadId ?? _parentConversations[idx].parentId;
+      if (realThreadId.isNotEmpty && sender == 'teacher') {
+        TeacherDataService.sendTeacherMessage(realThreadId, text).then((res) {
           if (res != null && res['id'] != null) {
             final mIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == tempId);
             if (mIdx != -1) {
@@ -1156,8 +1156,8 @@ class AppState extends ChangeNotifier {
                 id: res['id'].toString(),
                 text: text,
                 sender: 'teacher',
-                timestamp: timeStr,
-                status: 'delivered',
+                timestamp: res['createdAt']?.toString() ?? now.toIso8601String(),
+                status: 'sent',
               );
               notifyListeners();
             }
@@ -1169,30 +1169,62 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void markChatAsRead(String parentId) {
-    final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
+  // Fetch full message history for active teacher conversation
+  Future<void> fetchTeacherThreadMessages(String parentOrThreadId) async {
+    final idx = _parentConversations.indexWhere((c) => c.threadId == parentOrThreadId || c.parentId == parentOrThreadId);
+    if (idx == -1) return;
+
+    final realThreadId = _parentConversations[idx].threadId ?? _parentConversations[idx].parentId;
+    if (realThreadId.isEmpty) return;
+
+    try {
+      final res = await TeacherDataService.fetchTeacherThreadMessages(realThreadId);
+      final msgsJson = res?['messages'] as List<dynamic>? ?? [];
+      final msgs = msgsJson.map((m) => ParentMessage.fromJson(m as Map<String, dynamic>)).toList();
+      _parentConversations[idx].messages.clear();
+      _parentConversations[idx].messages.addAll(msgs);
+      if (msgs.isNotEmpty) {
+        _parentConversations[idx].lastMessage = msgs.last.text;
+        try {
+          _parentConversations[idx].lastMessageAt = DateTime.parse(msgs.last.timestamp);
+        } catch (_) {}
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error fetching teacher thread messages: $e');
+    }
+  }
+
+  void markChatAsRead(String parentOrThreadId) {
+    final idx = _parentConversations.indexWhere((c) => c.parentId == parentOrThreadId || c.threadId == parentOrThreadId);
     if (idx != -1) {
       _parentConversations[idx].unread = false;
       _parentConversations[idx].unreadCount = 0;
-      final threadId = _parentConversations[idx].threadId;
-      if (threadId != null && threadId.isNotEmpty) {
-        TeacherDataService.markTeacherThreadRead(threadId).catchError((_) => false);
+      final realThreadId = _parentConversations[idx].threadId ?? _parentConversations[idx].parentId;
+      if (realThreadId.isNotEmpty) {
+        TeacherDataService.markTeacherThreadRead(realThreadId).catchError((_) => false);
       }
       notifyListeners();
     }
   }
 
-  Future<void> pollTeacherChatDelta(String threadId) async {
-    final idx = _parentConversations.indexWhere((c) => c.threadId == threadId || c.parentId == threadId);
+  Future<void> pollTeacherChatDelta(String parentOrThreadId) async {
+    final idx = _parentConversations.indexWhere((c) => c.threadId == parentOrThreadId || c.parentId == parentOrThreadId);
     if (idx == -1) return;
+
+    final realThreadId = _parentConversations[idx].threadId ?? _parentConversations[idx].parentId;
+    if (realThreadId.isEmpty) return;
 
     String? latestTime;
     if (_parentConversations[idx].messages.isNotEmpty) {
-      latestTime = _parentConversations[idx].messages.last.timestamp;
+      final lastMsg = _parentConversations[idx].messages.last;
+      if (DateTime.tryParse(lastMsg.timestamp) != null) {
+        latestTime = lastMsg.timestamp;
+      }
     }
 
     try {
-      final res = await TeacherDataService.fetchTeacherThreadMessages(threadId, since: latestTime);
+      final res = await TeacherDataService.fetchTeacherThreadMessages(realThreadId, since: latestTime);
       final msgsJson = res?['messages'] as List<dynamic>? ?? [];
       if (msgsJson.isNotEmpty) {
         for (var m in msgsJson) {
@@ -1213,8 +1245,8 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> deleteTeacherMessage(String threadId, String messageId) async {
-    final idx = _parentConversations.indexWhere((c) => c.threadId == threadId || c.parentId == threadId);
+  Future<void> deleteTeacherMessage(String parentOrThreadId, String messageId) async {
+    final idx = _parentConversations.indexWhere((c) => c.threadId == parentOrThreadId || c.parentId == parentOrThreadId);
     if (idx != -1) {
       final mIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == messageId);
       if (mIdx != -1) {
