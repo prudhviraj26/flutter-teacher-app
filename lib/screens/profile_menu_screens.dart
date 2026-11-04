@@ -110,8 +110,10 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
         children: [
           _buildAppBar(context, appState.translate('teacherProfile'), AppColors.primary),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -294,6 +296,7 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
                 ),
               ),
             ),
+            ),
           ),
         ],
       ),
@@ -462,8 +465,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 : null,
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
               child: Form(
                 key: _formKey,
                 child: Column(
@@ -634,6 +639,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 ),
               ),
             ),
+            ),
           ),
         ],
       ),
@@ -789,8 +795,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         children: [
           _buildAppBar(context, appState.translate('feedback'), AppColors.secondary),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -875,6 +883,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         ],

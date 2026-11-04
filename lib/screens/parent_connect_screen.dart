@@ -5,6 +5,11 @@ import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
 import '../services/attachment_helper.dart';
+import '../services/notification_navigation_service.dart';
+
+String _cleanParentName(String name) {
+  return name.replaceFirst(RegExp(r'^(Mr\.|Mrs\.|Ms\.|Mr|Mrs|Ms)\s*', caseSensitive: false), '').trim();
+}
 
 class ParentConnectScreen extends StatefulWidget {
   const ParentConnectScreen({super.key});
@@ -171,9 +176,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                       final newParentId = 'P_${DateTime.now().millisecondsSinceEpoch}';
                                       final newConv = ParentConversation(
                                         parentId: newParentId,
-                                        parentName: student.parentName.startsWith('Mr.') || student.parentName.startsWith('Mrs.')
-                                            ? student.parentName
-                                            : 'Mr./Mrs. ${student.parentName}',
+                                        parentName: _cleanParentName(student.parentName),
                                         studentName: student.name,
                                         studentClass: student.studentClass,
                                         mobile: student.parentMobile,
@@ -348,9 +351,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
     });
 
     return Scaffold(
-      body: Stack(
-        children: [
-          Column(
+      body: Column(
             children: [
               // Header & Search
               Container(
@@ -490,8 +491,8 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                             ),
                                             alignment: Alignment.center,
                                             child: Text(
-                                              c.parentName.replaceAll('Mr. ', '').replaceAll('Mrs. ', '').isNotEmpty
-                                                  ? c.parentName.replaceAll('Mr. ', '').replaceAll('Mrs. ', '')[0]
+                                              _cleanParentName(c.parentName).isNotEmpty
+                                                  ? _cleanParentName(c.parentName)[0]
                                                   : 'P',
                                               style: const TextStyle(
                                                 color: AppColors.secondary,
@@ -528,7 +529,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                               children: [
                                                 Expanded(
                                                   child: Text(
-                                                    c.parentName,
+                                                    _cleanParentName(c.parentName),
                                                     style: TextStyle(
                                                       fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
                                                       fontSize: 14,
@@ -662,26 +663,19 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
               ),
             ],
           ),
-          
-          // FAB
-          Positioned(
-            bottom: 24,
-            right: 24,
-            child: ElevatedButton.icon(
-              onPressed: () => _showNewChatBottomSheet(context, appState),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.secondary,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                elevation: 6,
-                shadowColor: AppColors.secondary.withValues(alpha: 0.4),
-              ),
-              icon: const Icon(Icons.add, color: Colors.white),
-              label: const Text('New Conversation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
+      floatingActionButton: ElevatedButton.icon(
+        onPressed: () => _showNewChatBottomSheet(context, appState),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.secondary,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          elevation: 6,
+          shadowColor: AppColors.secondary.withValues(alpha: 0.4),
+        ),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('New Conversation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 
@@ -755,12 +749,13 @@ class ParentChatScreen extends StatefulWidget {
 class _ParentChatScreenState extends State<ParentChatScreen> {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  bool _isAttachmentOpen = false;
-  Timer? _pollingTimer;
+    Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
+    // Track active chat to suppress duplicate foreground push notification banner
+    NotificationNavigationService.activeChatThreadId = widget.parentId;
     // Mark conversation read on enter & fetch initial messages
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<AppState>(context, listen: false);
@@ -782,6 +777,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
   @override
   void dispose() {
+    NotificationNavigationService.activeChatThreadId = null;
     _pollingTimer?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
@@ -882,51 +878,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     );
   }
 
-  Future<void> _handleAttachCamera(AppState appState) async {
-    final result = await AttachmentHelper.pickFromCamera();
-    if (result != null) {
-      _sendAttachedFile(appState, result.name);
-    }
-  }
-
-  Future<void> _handleAttachGallery(AppState appState) async {
-    final result = await AttachmentHelper.pickFromGallery();
-    if (result != null) {
-      _sendAttachedFile(appState, result.name);
-    }
-  }
-
-  Future<void> _handleAttachFileManager(AppState appState) async {
-    final result = await AttachmentHelper.pickFromFileManager();
-    if (result != null) {
-      _sendAttachedFile(appState, result.name);
-    }
-  }
-
-  void _sendAttachedFile(AppState appState, String fileName) {
-    final now = DateTime.now();
-    final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
-
-    final newMsg = ParentMessage(
-      id: "M_${DateTime.now().millisecondsSinceEpoch}",
-      text: fileName,
-      sender: 'teacher',
-      timestamp: timeStr,
-      isAttachment: true,
-      attachmentName: fileName,
-    );
-
-    appState.addParentMessageObject(widget.parentId, newMsg);
-    
-    setState(() {
-      _isAttachmentOpen = false;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Attached: $fileName')),
-    );
-    _scrollToBottom();
-  }
+  
 
   void _handleRetrySend(AppState appState, String msgId) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -991,8 +943,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                       decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
                       alignment: Alignment.center,
                       child: Text(
-                        conv.parentName.replaceAll('Mr. ', '').replaceAll('Mrs. ', '').isNotEmpty
-                            ? conv.parentName.replaceAll('Mr. ', '').replaceAll('Mrs. ', '')[0]
+                        _cleanParentName(conv.parentName).isNotEmpty
+                            ? _cleanParentName(conv.parentName)[0]
                             : 'P',
                         style: const TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold),
                       ),
@@ -1004,7 +956,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          conv.parentName,
+                          _cleanParentName(conv.parentName),
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         Text(
@@ -1267,20 +1219,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
               top: false,
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () => setState(() => _isAttachmentOpen = true),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9FAFB),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.attach_file, color: Colors.grey),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
+                  
                   Expanded(
                     child: TextField(
                       controller: _msgController,
@@ -1323,68 +1262,12 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
               ),
             ),
           ),
-          
-          // Attachment modal bottom sheet simulation
-          if (_isAttachmentOpen)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => setState(() => _isAttachmentOpen = false),
-                child: Container(
-                  color: Colors.black54,
-                  alignment: Alignment.bottomCenter,
-                  child: GestureDetector(
-                    onTap: () {}, // consume clicks
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(topLeft: Radius.circular(28), topRight: Radius.circular(28)),
-                      ),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Select Attachment', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                              IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: () => setState(() => _isAttachmentOpen = false),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildAttachOption(Icons.camera_alt, 'Camera', 'Take photo using camera', () => _handleAttachCamera(appState)),
-                          _buildAttachOption(Icons.image, 'Gallery', 'Upload photo from gallery', () => _handleAttachGallery(appState)),
-                          _buildAttachOption(Icons.folder, 'File Manager', 'PDF, docs, or files from device', () => _handleAttachFileManager(appState)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
-
-  Widget _buildAttachOption(IconData icon, String title, String desc, VoidCallback onTap) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(color: AppColors.secondary.withValues(alpha: 0.1), shape: BoxShape.circle),
-        child: Icon(icon, color: AppColors.secondary),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-      subtitle: Text(desc, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-      onTap: onTap,
-    );
-  }
 }
+
 class IconDataEx {
   static const IconData volumeUp = Icons.volume_up;
 }

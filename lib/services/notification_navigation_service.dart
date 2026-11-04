@@ -37,6 +37,9 @@ class NotificationNavigationService {
 
   static bool _isInitialized = false;
 
+  /// Active chat identifier currently open in view (suppresses foreground notification banners)
+  static String? activeChatThreadId;
+
   /// Initializes Firebase and Local Notification subsystems safely
   static Future<void> initialize() async {
     if (_isInitialized) return;
@@ -141,6 +144,16 @@ class NotificationNavigationService {
   static void _showForegroundNotification(RemoteMessage message) {
     final notification = message.notification;
     if (notification == null) return;
+
+    // Suppress notification banner if user currently has this chat thread open
+    final chatThread = message.data['threadId'] ?? message.data['parentId'];
+    if (activeChatThreadId != null &&
+        message.data['type'] == 'chat' &&
+        chatThread != null &&
+        (chatThread == activeChatThreadId)) {
+      debugPrint('[FCM Foreground] Suppressed heads-up banner for active chat thread $activeChatThreadId');
+      return;
+    }
 
     final androidDetails = AndroidNotificationDetails(
       _highImportanceChannel.id,

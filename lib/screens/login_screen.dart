@@ -70,7 +70,8 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       if (context.mounted) {
-        _showToast(context, "Invalid Mobile Number or Password");
+        final errorMsg = appState.lastLoginError ?? "Invalid Mobile Number or Password";
+        _showToast(context, errorMsg);
       }
     }
   }

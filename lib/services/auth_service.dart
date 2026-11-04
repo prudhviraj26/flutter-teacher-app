@@ -11,6 +11,7 @@ class AuthService {
       if (isEmail) 'email': emailOrMobile else 'mobile': emailOrMobile,
       'password': password,
       'platform': 'mobile',
+      'app': 'teacher',
     };
 
     final response = await ApiService.post(

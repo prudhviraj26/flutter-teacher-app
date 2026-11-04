@@ -38,7 +38,7 @@ void showAbsentReasonModal({
             ),
           ),
           padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            bottom: MediaQuery.of(context).viewInsets.bottom + MediaQuery.of(context).viewPadding.bottom + 16,
             left: 24,
             right: 24,
             top: 24,
@@ -639,14 +639,17 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
 
             // Submit Button bar
             Container(
-              padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
               ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
                   onPressed: () {
                     final absentWithoutReason = appState.students.where((s) {
                       final isAbsent = (appState.tempAttendance[s.id] ?? 'P') == 'A';
@@ -684,6 +687,8 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                   ),
                 ),
               ),
+            ),
+            ),
             ),
           ],
         ],
@@ -954,14 +959,17 @@ class AttendanceConfirmationScreen extends StatelessWidget {
           
           // Submit Bar
           Container(
-            padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
             ),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                 onPressed: appState.isSubmittingAttendance
                     ? null
                     : () async {
@@ -1020,6 +1028,8 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                       ),
               ),
             ),
+          ),
+          ),
           ),
         ],
       ),
@@ -1399,14 +1409,17 @@ class AttendanceCorrectionScreen extends StatelessWidget {
           
           // Save Bar
           Container(
-            padding: const EdgeInsets.all(24),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
             ),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
                 onPressed: appState.isSubmittingAttendance
                     ? null
                     : () async {
@@ -1472,6 +1485,8 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                       ),
               ),
             ),
+          ),
+          ),
           ),
         ],
       ),

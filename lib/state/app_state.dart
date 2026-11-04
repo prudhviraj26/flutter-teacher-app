@@ -1,3 +1,4 @@
+import '../services/api_service.dart';
 import '../services/notification_navigation_service.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -50,6 +51,8 @@ class AppState extends ChangeNotifier {
   String get language => _language;
   bool get loggedIn => _loggedIn;
   bool get mustChangePassword => _mustChangePassword;
+  String? _lastLoginError;
+  String? get lastLoginError => _lastLoginError;
   Teacher? get teacher => _teacher;
   String? get profilePic => _profilePic;
   String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
@@ -373,6 +376,7 @@ class AppState extends ChangeNotifier {
 
   // Login Logic
   Future<bool> login(String mobile, String password) async {
+    _lastLoginError = null;
     if (mobile.isEmpty || password.isEmpty) return false;
 
     try {
@@ -383,6 +387,22 @@ class AppState extends ChangeNotifier {
 
       final userMap = response['user'] as Map<String, dynamic>?;
       if (userMap != null) {
+        // Role validation: Ensure user has a valid teacher role
+        final String userRole = userMap['role']?.toString() ?? '';
+        final List rolesList = userMap['roles'] is List ? (userMap['roles'] as List) : [];
+        final roles = rolesList.map((r) => r.toString()).toList();
+        if (userRole.isNotEmpty && !roles.contains(userRole)) {
+          roles.add(userRole);
+        }
+
+        const validTeacherRoles = ['class_teacher', 'subject_teacher', 'teacher'];
+        final isTeacher = roles.any((r) => validTeacherRoles.contains(r));
+
+        if (!isTeacher) {
+          _lastLoginError = 'Access restricted to teachers only.';
+          await ApiService.clearTokens();
+          return false;
+        }
         final String firstName = userMap['firstName'] ?? '';
         final String lastName = userMap['lastName'] ?? '';
         final String fullName = "$firstName $lastName".trim();
@@ -454,6 +474,11 @@ class AppState extends ChangeNotifier {
       return false;
     } catch (e) {
       debugPrint("API login failed: $e");
+      String msg = e.toString().replaceAll('Exception: ', '').trim();
+      if (msg.toLowerCase().startsWith('network error:')) {
+        msg = msg.substring('network error:'.length).trim();
+      }
+      _lastLoginError = msg.isNotEmpty ? msg : 'Invalid Mobile Number or Password';
       return false;
     }
   }

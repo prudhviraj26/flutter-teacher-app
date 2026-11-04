@@ -1,3 +1,4 @@
+import '../widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
@@ -364,6 +365,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
         ),
         ],
       ),
+      bottomNavigationBar: const CustomBottomNavBar(currentRoute: '/staff-notice'),
     );
   }
 }
