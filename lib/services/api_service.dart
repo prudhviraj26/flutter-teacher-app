@@ -11,16 +11,18 @@ class ApiService {
     return 'https://veyhoprod-crb8ahfge9dmhwep.centralindia-01.azurewebsites.net/v1';
   }
 
-  static const _storage = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   static const String _tokenKey = 'veyho_access_token';
   static const String _refreshTokenKey = 'veyho_refresh_token';
 
-  static bool _isRefreshing = false;
+  static Completer<bool>? _refreshCompleter;
 
   // Save Token
   static Future<void> saveTokens({required String accessToken, String? refreshToken}) async {
     await _storage.write(key: _tokenKey, value: accessToken);
-    if (refreshToken != null) {
+    if (refreshToken != null && refreshToken.isNotEmpty) {
       await _storage.write(key: _refreshTokenKey, value: refreshToken);
     }
   }
@@ -41,15 +43,18 @@ class ApiService {
     await _storage.delete(key: _refreshTokenKey);
   }
 
-  // Silent Token Renewal
+  // Silent Token Renewal with Completer Mutex
   static Future<bool> refreshTokenSilently() async {
-    if (_isRefreshing) return false;
-    _isRefreshing = true;
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+    final completer = Completer<bool>();
+    _refreshCompleter = completer;
 
     try {
       final refreshToken = await getRefreshToken();
       if (refreshToken == null || refreshToken.isEmpty) {
-        _isRefreshing = false;
+        if (!completer.isCompleted) completer.complete(false);
         return false;
       }
 
@@ -60,25 +65,39 @@ class ApiService {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'x-refresh-token': refreshToken,
+          'x-app-context': 'teacher',
         },
-        body: jsonEncode({'refreshToken': refreshToken}),
+        body: jsonEncode({
+          'refreshToken': refreshToken,
+          'app': 'teacher',
+        }),
       );
 
       if (res.statusCode >= 200 && res.statusCode < 300) {
         final body = jsonDecode(res.body);
         if (body is Map<String, dynamic> && body['accessToken'] != null) {
           final newAccess = body['accessToken'] as String;
-          final newRefresh = body['refreshToken'] as String?;
+          final newRefresh = body['refreshToken'] as String? ?? refreshToken;
           await saveTokens(accessToken: newAccess, refreshToken: newRefresh);
-          debugPrint('Silent token refresh succeeded');
-          _isRefreshing = false;
+          debugPrint('Teacher App silent token refresh succeeded');
+          if (!completer.isCompleted) completer.complete(true);
           return true;
         }
+      } else if (res.statusCode == 401 || res.statusCode == 403) {
+        debugPrint('Teacher App refresh token rejected: ${res.statusCode}');
+        try {
+          final errBody = jsonDecode(res.body);
+          final msg = (errBody['message'] ?? errBody['error'] ?? '').toString().toLowerCase();
+          if (msg.contains('expired') || msg.contains('revoked') || msg.contains('invalid or expired')) {
+            await clearTokens();
+          }
+        } catch (_) {}
       }
     } catch (e) {
-      debugPrint('Silent token refresh failed: $e');
+      debugPrint('Teacher App silent token refresh failed: $e');
     } finally {
-      _isRefreshing = false;
+      if (!completer.isCompleted) completer.complete(false);
+      _refreshCompleter = null;
     }
     return false;
   }

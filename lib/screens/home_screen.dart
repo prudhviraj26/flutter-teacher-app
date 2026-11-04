@@ -31,7 +31,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       if (mounted) {
         final appState = Provider.of<AppState>(context, listen: false);
-        appState.refreshBroadcasts();
+        appState.syncLiveData();
       }
     }
   }

@@ -134,9 +134,18 @@ class AppState extends ChangeNotifier {
     if (userJson != null) {
       try {
         final Map<String, dynamic> userData = json.decode(userJson);
-        _loggedIn = userData['loggedIn'] as bool? ?? false;
-        if (userData['teacher'] != null) {
-          _teacher = Teacher.fromJson(userData['teacher']);
+        final storedRole = userData['role']?.toString();
+        // RBAC: Reject parent sessions in teacher app
+        if (storedRole == 'parent') {
+          debugPrint('RBAC: Parent session detected in teacher app storage. Purging.');
+          await ApiService.clearTokens();
+          await _prefs?.remove('veyho_teacher_user');
+          _loggedIn = false;
+        } else {
+          _loggedIn = userData['loggedIn'] as bool? ?? false;
+          if (userData['teacher'] != null) {
+            _teacher = Teacher.fromJson(userData['teacher']);
+          }
         }
       } catch (e) {
         // clear corrupted data
@@ -158,6 +167,29 @@ class AppState extends ChangeNotifier {
   }
 
   // Load Live Data from NestJS API
+  
+  DateTime? _lastSyncTime;
+
+  /// Background-safe live data synchronization with 3-minute throttle.
+  Future<void> syncLiveData({bool force = false}) async {
+    if (!_loggedIn) return;
+
+    final now = DateTime.now();
+    if (!force && _lastSyncTime != null && now.difference(_lastSyncTime!).inMinutes < 3) {
+      debugPrint('[AppState] syncLiveData throttled (${now.difference(_lastSyncTime!).inSeconds}s since last sync)');
+      return;
+    }
+
+    _lastSyncTime = now;
+    debugPrint('[AppState] syncLiveData: auto-refreshing teacher live data in background');
+    try {
+      await loadLiveData(skipGetMe: false);
+      await refreshBroadcasts();
+    } catch (e) {
+      debugPrint('[AppState] syncLiveData error: $e');
+    }
+  }
+
   Future<void> loadLiveData({bool skipGetMe = false}) async {
     if (!_loggedIn) return;
 
@@ -175,6 +207,11 @@ class AppState extends ChangeNotifier {
             final String lastName = userMap['lastName'] ?? '';
             final String fullName = "$firstName $lastName".trim();
             final String role = userMap['role'] ?? 'class_teacher';
+            if (role == 'parent') {
+              debugPrint('RBAC: Teacher /auth/me returned parent role. Logging out.');
+              await logout();
+              return;
+            }
 
             final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
             final String? apiAssignedClass = userMap['assignedClass'] as String?;
@@ -453,6 +490,7 @@ class AppState extends ChangeNotifier {
 
         final userData = {
           'loggedIn': true,
+          'role': role,
           'teacher': loadedTeacher.toJson(),
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
