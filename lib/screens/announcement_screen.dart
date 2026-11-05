@@ -465,6 +465,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         const SizedBox(height: 6),
                         TextField(
                           controller: _titleController,
+                          textCapitalization: TextCapitalization.sentences,
                           decoration: InputDecoration(
                             hintText: appState.translate('enterTitle'),
                             fillColor: const Color(0xFFF5F7FA),
@@ -482,6 +483,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         const SizedBox(height: 6),
                         TextField(
                           controller: _messageController,
+                          textCapitalization: TextCapitalization.sentences,
                           maxLines: 4,
                           decoration: InputDecoration(
                             hintText: appState.translate('enterMessage'),

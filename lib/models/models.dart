@@ -60,6 +60,17 @@ class Teacher {
       'schoolName': schoolName,
     };
   }
+
+  String get firstName {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || trimmed == 'Teacher') return 'Teacher';
+    final parts = trimmed.split(RegExp(r'\s+'));
+    const prefixes = {'mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'dr', 'dr.', 'shri', 'smt'};
+    if (parts.length > 1 && prefixes.contains(parts[0].toLowerCase())) {
+      return parts[1];
+    }
+    return parts.first;
+  }
 }
 
 class Student {

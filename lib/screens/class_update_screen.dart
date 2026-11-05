@@ -629,6 +629,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         const SizedBox(height: 6),
                         TextField(
                           controller: _descriptionController,
+                          textCapitalization: TextCapitalization.sentences,
                           maxLines: 4,
                           decoration: InputDecoration(
                             hintText: appState.translate('enterMessage'),

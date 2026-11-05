@@ -226,7 +226,8 @@ class AppTranslations {
     "noticeNotFound": "Notice not found",
     "eventNotFound": "Event not found",
     "albumNotFound": "Album not found",
-    "photoNotFound": "Photo not found"
+    "photoNotFound": "Photo not found",
+    "hello": "Hello"
   };
 
   static const Map<String, String> mr = {
@@ -455,7 +456,8 @@ class AppTranslations {
     "noticeNotFound": "नोटीस सापडली नाही",
     "eventNotFound": "कार्यक्रम सापडला नाही",
     "albumNotFound": "एल्बम सापडला नाही",
-    "photoNotFound": "फोटो सापडला नाही"
+    "photoNotFound": "फोटो सापडला नाही",
+    "hello": "नमस्कार"
   };
 
   static const Map<String, String> hi = {
@@ -685,6 +687,7 @@ class AppTranslations {
     "noticeNotFound": "नोटिस नहीं मिला",
     "eventNotFound": "कार्यक्रम नहीं मिला",
     "albumNotFound": "एल्बम नहीं मिला",
-    "photoNotFound": "तस्वीर नहीं मिली"
+    "photoNotFound": "तस्वीर नहीं मिली",
+    "hello": "नमस्ते"
   };
 }

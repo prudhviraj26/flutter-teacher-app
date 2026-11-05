@@ -339,11 +339,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
-  bool _hasMinLength(String pwd) => pwd.length >= 10;
+  bool _hasMinLength(String pwd) => pwd.length >= 8;
   bool _hasUppercase(String pwd) => pwd.contains(RegExp(r'[A-Z]'));
   bool _hasLowercase(String pwd) => pwd.contains(RegExp(r'[a-z]'));
   bool _hasNumber(String pwd) => pwd.contains(RegExp(r'[0-9]'));
-  bool _hasSymbol(String pwd) => pwd.contains(RegExp(r'[@$!%*?&]'));
+  bool _hasSymbol(String pwd) => pwd.contains(RegExp(r'[^A-Za-z0-9\s]'));
 
   int _calculateStrength(String pwd) {
     int score = 0;
@@ -544,11 +544,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             obscureText: _obscureNew,
                             validator: (val) {
                               if (val == null || val.isEmpty) return 'Please enter new password';
-                              if (val.length < 10) return 'Password must be at least 10 characters';
+                              if (val.length < 8) return 'Password must be at least 8 characters';
                               if (!RegExp(r'[A-Z]').hasMatch(val)) return 'Must include at least 1 uppercase letter';
                               if (!RegExp(r'[a-z]').hasMatch(val)) return 'Must include at least 1 lowercase letter';
                               if (!RegExp(r'[0-9]').hasMatch(val)) return 'Must include at least 1 number';
-                              if (!RegExp(r'[@$!%*?&]').hasMatch(val)) return 'Must include at least 1 symbol (@\$!%*?&)';
+                              if (!RegExp(r'[^A-Za-z0-9\s]').hasMatch(val)) return 'Must include at least 1 special character';
                               return null;
                             },
                             decoration: InputDecoration(
@@ -585,11 +585,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             ),
                             const SizedBox(height: 12),
                             // Security Checklist
-                            _buildRequirementItem('At least 10 characters', _hasMinLength(newPwd)),
+                            _buildRequirementItem('At least 8 characters', _hasMinLength(newPwd)),
                             _buildRequirementItem('At least 1 uppercase letter (A-Z)', _hasUppercase(newPwd)),
                             _buildRequirementItem('At least 1 lowercase letter (a-z)', _hasLowercase(newPwd)),
                             _buildRequirementItem('At least 1 number (0-9)', _hasNumber(newPwd)),
-                            _buildRequirementItem('At least 1 special symbol (@\$!%*?&)', _hasSymbol(newPwd)),
+                            _buildRequirementItem('At least 1 special character', _hasSymbol(newPwd)),
                           ],
 
                           const SizedBox(height: 16),

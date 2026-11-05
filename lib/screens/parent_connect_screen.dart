@@ -1223,6 +1223,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _msgController,
+                      textCapitalization: TextCapitalization.sentences,
                       maxLength: 1000,
                       buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
                         if (currentLength > 800) {
