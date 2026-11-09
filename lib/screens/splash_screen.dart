@@ -44,28 +44,35 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       }
     });
 
-    // Check login state and redirect
-    Timer(const Duration(milliseconds: 2300), () {
-      if (mounted) {
-        final appState = Provider.of<AppState>(context, listen: false);
-        if (appState.loggedIn) {
-          if (appState.mustChangePassword) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
-              ),
-            );
-          } else {
-            Navigator.pushReplacementNamed(context, '/home');
-            NotificationNavigationService.checkInitialNotification();
-            NotificationNavigationService.requestPermissionAndRegister();
-          }
-        } else {
-          Navigator.pushReplacementNamed(context, '/login');
-        }
+    // Synchronized auth bootstrap and navigation
+    _bootstrapAndNavigate();
+  }
+
+  Future<void> _bootstrapAndNavigate() async {
+    final animDelay = Future.delayed(const Duration(milliseconds: 1800));
+    final appState = Provider.of<AppState>(context, listen: false);
+    final results = await Future.wait([animDelay, appState.bootstrapAuth()]);
+    final authResult = results[1] as AuthBootstrapResult;
+
+    if (!mounted) return;
+
+    if (authResult == AuthBootstrapResult.authenticated ||
+        authResult == AuthBootstrapResult.offlineAuthenticated) {
+      if (appState.mustChangePassword) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
+          ),
+        );
+      } else {
+        Navigator.pushReplacementNamed(context, '/home');
+        NotificationNavigationService.checkInitialNotification();
+        NotificationNavigationService.requestPermissionAndRegister();
       }
-    });
+    } else {
+      Navigator.pushReplacementNamed(context, '/login');
+    }
   }
 
   @override

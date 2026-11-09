@@ -21,26 +21,44 @@ class ApiService {
 
   // Save Token
   static Future<void> saveTokens({required String accessToken, String? refreshToken}) async {
-    await _storage.write(key: _tokenKey, value: accessToken);
-    if (refreshToken != null && refreshToken.isNotEmpty) {
-      await _storage.write(key: _refreshTokenKey, value: refreshToken);
+    try {
+      await _storage.write(key: _tokenKey, value: accessToken);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await _storage.write(key: _refreshTokenKey, value: refreshToken);
+      }
+    } catch (e) {
+      debugPrint('[ApiService] Keystore saveTokens error: $e');
     }
   }
 
   // Get Access Token
   static Future<String?> getToken() async {
-    return await _storage.read(key: _tokenKey);
+    try {
+      return await _storage.read(key: _tokenKey);
+    } catch (e) {
+      debugPrint('[ApiService] Keystore getToken error: $e');
+      return null;
+    }
   }
 
   // Get Refresh Token
   static Future<String?> getRefreshToken() async {
-    return await _storage.read(key: _refreshTokenKey);
+    try {
+      return await _storage.read(key: _refreshTokenKey);
+    } catch (e) {
+      debugPrint('[ApiService] Keystore getRefreshToken error: $e');
+      return null;
+    }
   }
 
   // Clear Tokens
   static Future<void> clearTokens() async {
-    await _storage.delete(key: _tokenKey);
-    await _storage.delete(key: _refreshTokenKey);
+    try {
+      await _storage.delete(key: _tokenKey);
+      await _storage.delete(key: _refreshTokenKey);
+    } catch (e) {
+      debugPrint('[ApiService] Keystore clearTokens error: $e');
+    }
   }
 
   // Silent Token Renewal with Completer Mutex
@@ -88,13 +106,13 @@ class ApiService {
         try {
           final errBody = jsonDecode(res.body);
           final msg = (errBody['message'] ?? errBody['error'] ?? '').toString().toLowerCase();
-          if (msg.contains('expired') || msg.contains('revoked') || msg.contains('invalid or expired')) {
+          if (msg.contains('session expired or revoked') || msg.contains('invalid or expired refresh token')) {
             await clearTokens();
           }
         } catch (_) {}
       }
     } catch (e) {
-      debugPrint('Teacher App silent token refresh failed: $e');
+      debugPrint('Teacher App silent token refresh network issue (tokens kept): $e');
     } finally {
       if (!completer.isCompleted) completer.complete(false);
       _refreshCompleter = null;

@@ -1,12 +1,21 @@
 import '../services/api_service.dart';
 import '../services/notification_navigation_service.dart';
+import 'dart:async';
 import 'dart:convert';
+
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../constants/translations.dart';
 import '../services/auth_service.dart';
 import '../services/teacher_data_service.dart';
+
+enum AuthBootstrapResult {
+  authenticated,
+  offlineAuthenticated,
+  unauthenticated,
+}
 
 class AppState extends ChangeNotifier {
   SharedPreferences? _prefs;
@@ -117,9 +126,54 @@ class AppState extends ChangeNotifier {
   Map<String, String> get tempAttendance => _tempAttendance;
   Map<String, String> get tempAttendanceReasons => _tempAttendanceReasons;
 
+  Completer<void>? _initCompleter;
+
   // Constructor
   AppState() {
-    _initPreferences();
+    ensureInitialized();
+  }
+
+  Future<void> ensureInitialized() async {
+    if (_initCompleter != null) {
+      return _initCompleter!.future;
+    }
+    final completer = Completer<void>();
+    _initCompleter = completer;
+    try {
+      await _initPreferences();
+    } finally {
+      if (!completer.isCompleted) {
+        completer.complete();
+      }
+    }
+  }
+
+  Future<AuthBootstrapResult> bootstrapAuth() async {
+    await ensureInitialized();
+    final refreshToken = await ApiService.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      _loggedIn = false;
+      return AuthBootstrapResult.unauthenticated;
+    }
+
+    try {
+      final refreshed = await ApiService.refreshTokenSilently();
+      if (refreshed) {
+        _loggedIn = true;
+        loadLiveData(skipGetMe: true);
+        return AuthBootstrapResult.authenticated;
+      }
+    } catch (e) {
+      debugPrint('[AppState] Teacher splash proactive refresh error: $e');
+    }
+
+    final checkToken = await ApiService.getRefreshToken();
+    if (checkToken != null && checkToken.isNotEmpty && _loggedIn) {
+      return AuthBootstrapResult.offlineAuthenticated;
+    }
+
+    _loggedIn = false;
+    return AuthBootstrapResult.unauthenticated;
   }
 
   // Init Shared Preferences
