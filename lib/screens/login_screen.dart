@@ -1,3 +1,6 @@
+import '../services/notification_navigation_service.dart';
+import '../widgets/clickwrap_dialog.dart';
+import '../services/device_info_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -28,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin(BuildContext context, AppState appState) async {
+  void _handleLogin(AppState appState) async {
     if (_isLoading) return;
 
     final mobile = _mobileController.text;
@@ -57,19 +60,44 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success) {
       if (context.mounted) {
-        if (appState.mustChangePassword) {
-          Navigator.pushReplacement(
+        // Check if legal assent is needed (first time on device or major version bump)
+        final needsConsent = await appState.checkNeedsLegalAssent();
+        if (needsConsent && mounted) {
+          final telemetry = await DeviceInfoService.getDeviceTelemetry();
+          if (!mounted) return;
+          final agreed = await ClickwrapDialog.show(
             context,
-            MaterialPageRoute(
-              builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
-            ),
+            activeDocs: appState.activeLegalDocs,
+            deviceUuid: telemetry.deviceUuid,
           );
-        } else {
-          Navigator.pushReplacementNamed(context, '/home');
+          if (!agreed) {
+            return;
+          }
+          final termsDoc = appState.activeLegalDocs?['terms'] as Map<String, dynamic>?;
+          final privacyDoc = appState.activeLegalDocs?['privacy'] as Map<String, dynamic>?;
+          await appState.onLegalConsentAccepted(
+            termsVersion: termsDoc?['version']?.toString() ?? 'v1.0.0',
+            privacyVersion: privacyDoc?['version']?.toString() ?? 'v1.0.0',
+          );
+        }
+
+        if (mounted) {
+          if (appState.mustChangePassword) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
+              ),
+            );
+          } else {
+            Navigator.pushReplacementNamed(context, '/home');
+          }
+          // Request notification permission and register token with backend
+          NotificationNavigationService.requestPermissionAndRegister();
         }
       }
     } else {
-      if (context.mounted) {
+      if (mounted) {
         final errorMsg = appState.lastLoginError ?? "Invalid Mobile Number or Password";
         _showToast(context, errorMsg);
       }
@@ -212,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     focusNode: _passwordFocusNode,
                     obscureText: _obscurePassword,
                     textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _handleLogin(context, appState),
+                    onSubmitted: (_) => _handleLogin(appState),
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
                       suffixIcon: IconButton(
@@ -246,7 +274,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   
                   // Login Button
                   ElevatedButton(
-                    onPressed: _isLoading ? null : () => _handleLogin(context, appState),
+                    onPressed: _isLoading ? null : () => _handleLogin(appState),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: AppColors.secondary,

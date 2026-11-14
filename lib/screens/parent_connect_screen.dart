@@ -22,6 +22,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
   String _searchQuery = '';
   String _newChatSearchQuery = '';
   String _activeFilter = 'all'; // 'all' or 'unread'
+  Timer? _threadsPollingTimer;
 
   @override
   void initState() {
@@ -31,6 +32,19 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
       appState.refreshBroadcasts();
       appState.loadLiveData();
     });
+    // Smart auto-polling: refresh conversation list every 8 seconds while screen is open
+    _threadsPollingTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) {
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.fetchParentConversations();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _threadsPollingTimer?.cancel();
+    super.dispose();
   }
 
   void _showNewChatBottomSheet(BuildContext context, AppState appState) {

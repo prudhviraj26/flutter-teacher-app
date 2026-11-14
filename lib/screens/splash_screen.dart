@@ -1,3 +1,5 @@
+import '../widgets/clickwrap_dialog.dart';
+import '../services/device_info_service.dart';
 import '../services/notification_navigation_service.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -58,17 +60,40 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     if (authResult == AuthBootstrapResult.authenticated ||
         authResult == AuthBootstrapResult.offlineAuthenticated) {
-      if (appState.mustChangePassword) {
-        Navigator.pushReplacement(
+      final needsConsent = await appState.checkNeedsLegalAssent();
+      if (needsConsent && mounted) {
+        final telemetry = await DeviceInfoService.getDeviceTelemetry();
+        if (!mounted) return;
+        final agreed = await ClickwrapDialog.show(
           context,
-          MaterialPageRoute(
-            builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
-          ),
+          activeDocs: appState.activeLegalDocs,
+          deviceUuid: telemetry.deviceUuid,
         );
-      } else {
-        Navigator.pushReplacementNamed(context, '/home');
-        NotificationNavigationService.checkInitialNotification();
-        NotificationNavigationService.requestPermissionAndRegister();
+        if (!agreed) {
+          if (mounted) Navigator.pushReplacementNamed(context, '/login');
+          return;
+        }
+        final termsDoc = appState.activeLegalDocs?['terms'] as Map<String, dynamic>?;
+        final privacyDoc = appState.activeLegalDocs?['privacy'] as Map<String, dynamic>?;
+        await appState.onLegalConsentAccepted(
+          termsVersion: termsDoc?['version']?.toString() ?? 'v1.0.0',
+          privacyVersion: privacyDoc?['version']?.toString() ?? 'v1.0.0',
+        );
+      }
+
+      if (mounted) {
+        if (appState.mustChangePassword) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
+            ),
+          );
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+          NotificationNavigationService.checkInitialNotification();
+          NotificationNavigationService.requestPermissionAndRegister();
+        }
       }
     } else {
       Navigator.pushReplacementNamed(context, '/login');

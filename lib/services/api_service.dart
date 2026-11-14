@@ -345,4 +345,38 @@ class ApiService {
       throw Exception(errorMessage);
     }
   }
+
+  // Legal & Clickwrap Endpoints
+  static Future<Map<String, dynamic>?> fetchActiveLegalDocuments() async {
+    try {
+      final res = await get('/legal/active', requireAuth: false);
+      if (res is Map<String, dynamic>) {
+        return res;
+      }
+    } catch (e) {
+      debugPrint('[ApiService] Failed to fetch active legal documents: $e');
+    }
+    return null;
+  }
+
+  static Future<bool> recordLegalConsent({
+    required List<Map<String, dynamic>> consents,
+    String? deviceUuid,
+    String? deviceToken,
+  }) async {
+    try {
+      final payload = <String, dynamic>{
+        'consents': consents,
+      };
+      if (deviceUuid != null) payload['deviceUuid'] = deviceUuid;
+      if (deviceToken != null) payload['deviceToken'] = deviceToken;
+
+      final res = await post('/legal/consent', payload, requireAuth: true);
+      return res != null && res['success'] == true;
+    } catch (e) {
+      debugPrint('[ApiService] Failed to record legal consent: $e');
+      return false;
+    }
+  }
+
 }

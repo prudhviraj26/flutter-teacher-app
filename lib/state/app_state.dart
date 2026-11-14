@@ -18,6 +18,94 @@ enum AuthBootstrapResult {
 }
 
 class AppState extends ChangeNotifier {
+  String? _acceptedTermsVersion;
+  String? _acceptedPrivacyVersion;
+  String? get acceptedTermsVersion => _acceptedTermsVersion;
+  String? get acceptedPrivacyVersion => _acceptedPrivacyVersion;
+
+  Map<String, dynamic>? _activeLegalDocs;
+  Map<String, dynamic>? get activeLegalDocs => _activeLegalDocs;
+
+  Future<bool> checkNeedsLegalAssent() async {
+    try {
+      _activeLegalDocs = await ApiService.fetchActiveLegalDocuments();
+      if (_activeLegalDocs == null) return false;
+
+      final terms = _activeLegalDocs?['terms'] as Map<String, dynamic>?;
+      final privacy = _activeLegalDocs?['privacy'] as Map<String, dynamic>?;
+
+      final targetTermsVer = terms?['version']?.toString() ?? 'v1.0.0';
+      final targetPrivacyVer = privacy?['version']?.toString() ?? 'v1.0.0';
+      final termsMajor = terms?['isMajor'] == true;
+      final privacyMajor = privacy?['isMajor'] == true;
+
+      // Enterprise standard: Consent belongs to the individual user account
+      final String? empId = _teacher?.employeeId;
+      final String? mobile = _teacher?.mobile;
+      final String? tId = _teacher?.id;
+
+      final userTerms = _acceptedTermsVersion ??
+          (empId != null && empId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$empId') : null) ??
+          (mobile != null && mobile.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$mobile') : null) ??
+          (tId != null && tId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$tId') : null);
+
+      final userPrivacy = _acceptedPrivacyVersion ??
+          (empId != null && empId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$empId') : null) ??
+          (mobile != null && mobile.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$mobile') : null) ??
+          (tId != null && tId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$tId') : null);
+
+      if (userTerms == null || userPrivacy == null) {
+        return true;
+      }
+
+      if (termsMajor && userTerms != targetTermsVer) {
+        return true;
+      }
+      if (privacyMajor && userPrivacy != targetPrivacyVer) {
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[AppState] checkNeedsLegalAssent error: $e');
+      return false;
+    }
+  }
+
+  Future<void> onLegalConsentAccepted({
+    required String termsVersion,
+    required String privacyVersion,
+  }) async {
+    _acceptedTermsVersion = termsVersion;
+    _acceptedPrivacyVersion = privacyVersion;
+
+    if (_teacher != null) {
+      if (_teacher!.employeeId.isNotEmpty) {
+        await _prefs?.setString('veyho_accepted_terms_${_teacher!.employeeId}', termsVersion);
+        await _prefs?.setString('veyho_accepted_privacy_${_teacher!.employeeId}', privacyVersion);
+      }
+      if (_teacher!.mobile.isNotEmpty) {
+        await _prefs?.setString('veyho_accepted_terms_${_teacher!.mobile}', termsVersion);
+        await _prefs?.setString('veyho_accepted_privacy_${_teacher!.mobile}', privacyVersion);
+      }
+      if (_teacher!.id.isNotEmpty) {
+        await _prefs?.setString('veyho_accepted_terms_${_teacher!.id}', termsVersion);
+        await _prefs?.setString('veyho_accepted_privacy_${_teacher!.id}', privacyVersion);
+      }
+    }
+
+    final userJson = _prefs?.getString('veyho_teacher_user');
+    if (userJson != null) {
+      try {
+        final Map<String, dynamic> userData = json.decode(userJson);
+        userData['acceptedTermsVersion'] = termsVersion;
+        userData['acceptedPrivacyVersion'] = privacyVersion;
+        await _prefs?.setString('veyho_teacher_user', json.encode(userData));
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
   SharedPreferences? _prefs;
 
   // Language & Session
@@ -200,6 +288,19 @@ class AppState extends ChangeNotifier {
           if (userData['teacher'] != null) {
             _teacher = Teacher.fromJson(userData['teacher']);
           }
+          final String? empId = _teacher?.employeeId;
+          final String? mobile = _teacher?.mobile;
+          final String? tId = _teacher?.id;
+
+          _acceptedTermsVersion = userData['acceptedTermsVersion'] as String? ??
+              (empId != null && empId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$empId') : null) ??
+              (mobile != null && mobile.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$mobile') : null) ??
+              (tId != null && tId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$tId') : null);
+
+          _acceptedPrivacyVersion = userData['acceptedPrivacyVersion'] as String? ??
+              (empId != null && empId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$empId') : null) ??
+              (mobile != null && mobile.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$mobile') : null) ??
+              (tId != null && tId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$tId') : null);
         }
       } catch (e) {
         // clear corrupted data
@@ -224,12 +325,12 @@ class AppState extends ChangeNotifier {
   
   DateTime? _lastSyncTime;
 
-  /// Background-safe live data synchronization with 3-minute throttle.
+  /// Background-safe live data synchronization with 5-second debounce.
   Future<void> syncLiveData({bool force = false}) async {
     if (!_loggedIn) return;
 
     final now = DateTime.now();
-    if (!force && _lastSyncTime != null && now.difference(_lastSyncTime!).inMinutes < 3) {
+    if (!force && _lastSyncTime != null && now.difference(_lastSyncTime!).inSeconds < 5) {
       debugPrint('[AppState] syncLiveData throttled (${now.difference(_lastSyncTime!).inSeconds}s since last sync)');
       return;
     }
@@ -380,6 +481,15 @@ class AppState extends ChangeNotifier {
             await fetchParentConversations();
           } catch (e) {
             debugPrint("Error fetching parent conversations: $e");
+          }
+        }(),
+
+        // Pipeline 6: Live Class updates (homework & classwork)
+        () async {
+          try {
+            await _loadClassUpdates();
+          } catch (e) {
+            debugPrint("Error fetching class updates: $e");
           }
         }(),
       ]);
@@ -539,6 +649,21 @@ class AppState extends ChangeNotifier {
         );
 
         _mustChangePassword = (response['mustChangePassword'] == true) || (userMap['mustChangePassword'] == true);
+        final String empId = loadedTeacher.employeeId;
+        final String tMobile = loadedTeacher.mobile;
+        final String tId = loadedTeacher.id;
+
+        _acceptedTermsVersion = response['acceptedTermsVersion'] as String? ??
+            userMap['acceptedTermsVersion'] as String? ??
+            (empId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$empId') : null) ??
+            (tMobile.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$tMobile') : null) ??
+            (tId.isNotEmpty ? _prefs?.getString('veyho_accepted_terms_$tId') : null);
+
+        _acceptedPrivacyVersion = response['acceptedPrivacyVersion'] as String? ??
+            userMap['acceptedPrivacyVersion'] as String? ??
+            (empId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$empId') : null) ??
+            (tMobile.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$tMobile') : null) ??
+            (tId.isNotEmpty ? _prefs?.getString('veyho_accepted_privacy_$tId') : null);
         _loggedIn = true;
         _teacher = loadedTeacher;
 
@@ -546,6 +671,8 @@ class AppState extends ChangeNotifier {
           'loggedIn': true,
           'role': role,
           'teacher': loadedTeacher.toJson(),
+          'acceptedTermsVersion': _acceptedTermsVersion,
+          'acceptedPrivacyVersion': _acceptedPrivacyVersion,
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
         _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
@@ -914,20 +1041,43 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadClassUpdates() async {
     final teacherId = _teacher?.id ?? 'default';
+    // 1. Instant local cache restore
     final stored = _prefs?.getString('veyho_teacher_class_updates_$teacherId');
     if (stored != null && stored.isNotEmpty) {
       try {
         final List<dynamic> list = json.decode(stored);
         final parsed = list.map((item) => ClassUpdate.fromJson(item as Map<String, dynamic>)).toList();
         _classUpdates = parsed.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
-        // Sort newest first
         _classUpdates.sort((a, b) => b.date.compareTo(a.date));
-        return;
       } catch (e) {
         debugPrint("Error loading class updates from storage: $e");
       }
     }
-    _classUpdates = [];
+
+    // 2. Live network fetch if logged in
+    if (_loggedIn) {
+      try {
+        final liveUpdates = await TeacherDataService.fetchClassUpdates();
+        if (liveUpdates.isNotEmpty) {
+          final Map<String, ClassUpdate> mergedMap = {};
+          // Preserve any locally added updates
+          for (final u in _classUpdates) {
+            mergedMap[u.id] = u;
+          }
+          // Merge live server updates
+          for (final u in liveUpdates) {
+            mergedMap[u.id] = u;
+          }
+          final mergedList = mergedMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
+          mergedList.sort((a, b) => b.date.compareTo(a.date));
+          _classUpdates = mergedList;
+          await _saveClassUpdates();
+          notifyListeners();
+        }
+      } catch (e) {
+        debugPrint("Error fetching live class updates: $e");
+      }
+    }
   }
 
   Future<void> _saveClassUpdates() async {

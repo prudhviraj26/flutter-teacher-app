@@ -540,4 +540,98 @@ class TeacherDataService {
       return false;
     }
   }
+
+  // Fetch Class Updates (Homework & Classwork) from Backend API
+  static Future<List<ClassUpdate>> fetchClassUpdates() async {
+    try {
+      final response = await ApiService.get('/communication/broadcasts?pageSize=50');
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+      if (list != null) {
+        final updates = <ClassUpdate>[];
+        for (final item in list) {
+          if (item is Map<String, dynamic>) {
+            final bType = (item['broadcastType'] ?? item['broadcast_type'] ?? '').toString().toLowerCase();
+            if (bType == 'homework' || bType == 'classwork') {
+              updates.add(_mapApiBroadcastToClassUpdate(item));
+            }
+          }
+        }
+        return updates;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchClassUpdates error: $e');
+    }
+    return [];
+  }
+
+  static ClassUpdate _mapApiBroadcastToClassUpdate(Map<String, dynamic> json) {
+    final String id = json['id']?.toString() ?? 'CU-UNK';
+    final String rawTitle = json['title'] ?? 'Class Update';
+    final String bType = (json['broadcastType'] ?? json['broadcast_type'] ?? 'classwork').toString().toLowerCase();
+    final String type = bType == 'homework' ? 'Homework' : 'Classwork';
+
+    String subject = 'General';
+    String title = rawTitle;
+    if (rawTitle.contains(':')) {
+      final parts = rawTitle.split(':');
+      subject = parts[0].trim();
+      title = parts.sublist(1).join(':').trim();
+    }
+
+    final String description = json['body'] ?? json['message'] ?? '';
+    final String teacherName = json['senderName'] ?? json['author'] ?? 'Teacher';
+    final String teacherId = json['senderStaffId'] ?? json['authorId'] ?? '';
+
+    String date = '2026-05-10';
+    if (json['createdAt'] != null) {
+      try {
+        final dt = DateTime.parse(json['createdAt'].toString()).toLocal();
+        date = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+      } catch (_) {
+        date = json['createdAt']?.toString().split('T')[0] ?? '2026-05-10';
+      }
+    }
+
+    String? dueDate;
+    if (json['scheduledFor'] != null) {
+      try {
+        final dt = DateTime.parse(json['scheduledFor'].toString()).toLocal();
+        dueDate = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+      } catch (_) {}
+    }
+
+    List<String>? attachments;
+    if (json['attachments'] is List) {
+      attachments = (json['attachments'] as List).map((a) {
+        if (a is Map) return (a['name'] ?? a['fileName'] ?? a['url'] ?? '').toString();
+        return a.toString();
+      }).where((s) => s.isNotEmpty).toList();
+    }
+
+    final String classTarget = json['targetSectionName'] ?? json['targetClassName'] ?? 'All';
+
+    return ClassUpdate(
+      id: id,
+      type: type,
+      title: title.isNotEmpty ? title : rawTitle,
+      description: description,
+      subject: subject,
+      classTarget: classTarget,
+      teacherId: teacherId,
+      teacherName: teacherName,
+      dueDate: dueDate,
+      attachments: attachments,
+      date: date,
+    );
+  }
+
 }
