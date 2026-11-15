@@ -83,17 +83,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (mounted) {
           if (appState.mustChangePassword) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
-              ),
-            );
+            Navigator.pushReplacementNamed(context, '/set-new-password');
           } else {
             Navigator.pushReplacementNamed(context, '/home');
+            NotificationNavigationService.requestPermissionAndRegister();
           }
-          // Request notification permission and register token with backend
-          NotificationNavigationService.requestPermissionAndRegister();
         }
       }
     } else {

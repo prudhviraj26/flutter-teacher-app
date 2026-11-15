@@ -83,12 +83,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
       if (mounted) {
         if (appState.mustChangePassword) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ChangePasswordScreen(isFirstLogin: true),
-            ),
-          );
+          Navigator.pushReplacementNamed(context, '/set-new-password');
         } else {
           Navigator.pushReplacementNamed(context, '/home');
           NotificationNavigationService.checkInitialNotification();

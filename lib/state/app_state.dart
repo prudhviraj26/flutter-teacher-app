@@ -190,6 +190,7 @@ class AppState extends ChangeNotifier {
   int get unreadParentMessagesCount {
     int total = 0;
     for (final c in _parentConversations) {
+      if (c.messages.isEmpty && c.lastMessage.trim().isEmpty) continue;
       if (c.unreadCount > 0) {
         total += c.unreadCount;
       } else if (c.unread) {
@@ -1417,7 +1418,10 @@ class AppState extends ChangeNotifier {
     if (stored != null && stored.isNotEmpty) {
       try {
         final List<dynamic> list = json.decode(stored);
-        _parentConversations = list.map((item) => ParentConversation.fromJson(item as Map<String, dynamic>)).toList();
+        _parentConversations = list
+            .map((item) => ParentConversation.fromJson(item as Map<String, dynamic>))
+            .where((c) => c.messages.isNotEmpty || c.lastMessage.trim().isNotEmpty)
+            .toList();
         notifyListeners();
       } catch (e) {
         debugPrint("Error loading cached parent conversations: $e");
@@ -1429,25 +1433,28 @@ class AppState extends ChangeNotifier {
   Future<void> fetchParentConversations() async {
     try {
       final liveThreads = await TeacherDataService.fetchTeacherChatThreads();
-      if (liveThreads.isNotEmpty) {
-        // Preserve active in-memory messages to prevent chat screen flickering/disappearing
-        for (final live in liveThreads) {
-          ParentConversation? existing;
-          for (final c in _parentConversations) {
-            if ((c.threadId != null && live.threadId != null && c.threadId == live.threadId) ||
-                (c.parentId.isNotEmpty && c.parentId == live.parentId)) {
-              existing = c;
-              break;
-            }
-          }
-          if (existing != null && existing.messages.isNotEmpty && live.messages.isEmpty) {
-            live.messages.addAll(existing.messages);
+      // Only keep active threads that have actual messages exchanged
+      final validThreads = liveThreads
+          .where((c) => c.messages.isNotEmpty || c.lastMessage.trim().isNotEmpty)
+          .toList();
+
+      // Preserve active in-memory messages to prevent chat screen flickering/disappearing
+      for (final live in validThreads) {
+        ParentConversation? existing;
+        for (final c in _parentConversations) {
+          if ((c.threadId != null && live.threadId != null && c.threadId == live.threadId) ||
+              (c.parentId.isNotEmpty && c.parentId == live.parentId)) {
+            existing = c;
+            break;
           }
         }
-        _parentConversations = liveThreads;
-        await _saveParentConversations();
-        notifyListeners();
+        if (existing != null && existing.messages.isNotEmpty && live.messages.isEmpty) {
+          live.messages.addAll(existing.messages);
+        }
       }
+      _parentConversations = validThreads;
+      await _saveParentConversations();
+      notifyListeners();
     } catch (e) {
       debugPrint("Error fetching parent conversations: $e");
     }

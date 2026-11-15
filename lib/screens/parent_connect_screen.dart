@@ -348,9 +348,13 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
     }
 
     // Class Teacher view
-    final unreadTotal = appState.unreadParentMessagesCount;
+    final activeConversations = appState.parentConversations.where((c) {
+      return c.messages.isNotEmpty || c.lastMessage.trim().isNotEmpty;
+    }).toList();
 
-    final conversations = appState.parentConversations.where((c) {
+    final unreadTotal = activeConversations.where((c) => c.unreadCount > 0 || c.unread).length;
+
+    final conversations = activeConversations.where((c) {
       final q = _searchQuery.toLowerCase();
       final matchesSearch = c.parentName.toLowerCase().contains(q) ||
           c.studentName.toLowerCase().contains(q);
@@ -430,7 +434,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                       children: [
                         _buildFilterChip(
                           label: 'All',
-                          count: appState.parentConversations.length,
+                          count: activeConversations.length,
                           isSelected: _activeFilter == 'all',
                           onTap: () => setState(() => _activeFilter = 'all'),
                         ),

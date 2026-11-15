@@ -26,6 +26,12 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   final List<AttachmentResult> _selectedAttachments = [];
   bool _failedToPost = false;
 
+  // Search & Refresh state
+  bool _isSearchOpen = false;
+  String _searchTerm = '';
+  final TextEditingController _searchController = TextEditingController();
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -37,7 +43,18 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await Provider.of<AppState>(context, listen: false).refreshClassUpdates();
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   void _showOversizedFileDialog(AttachmentResult file) {
@@ -356,9 +373,19 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       availableSubjects.addAll(['Mathematics', 'Science', 'English']);
     }
 
-    final filteredUpdates = _filterType == 'All'
+    final tabFiltered = _filterType == 'All'
         ? appState.classUpdates
         : appState.classUpdates.where((u) => u.type == _filterType).toList();
+
+    final filteredUpdates = tabFiltered.where((u) {
+      final q = _searchTerm.toLowerCase().trim();
+      if (q.isEmpty) return true;
+      return u.title.toLowerCase().contains(q) ||
+          u.description.toLowerCase().contains(q) ||
+          u.subject.toLowerCase().contains(q) ||
+          u.classTarget.toLowerCase().contains(q) ||
+          u.teacherName.toLowerCase().contains(q);
+    }).toList();
 
     return Scaffold(
       body: Column(
@@ -366,75 +393,208 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
           // Header & Tabs
           Container(
             color: AppColors.primary,
-            padding: const EdgeInsets.fromLTRB(24, 48, 24, 20),
+            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 8, 16, 16),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.arrow_back, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          appState.translate('classUpdate'),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (appState.unreadClassUpdatesCount > 0)
-                          TextButton.icon(
-                            onPressed: () => appState.markAllClassUpdatesAsRead(),
-                            icon: const Icon(Icons.done_all, color: Colors.white, size: 16),
-                            label: Text(
-                              appState.language == 'mr'
-                                  ? 'सर्व वाचले'
-                                  : appState.language == 'hi'
-                                      ? 'सब पढ़ा हुआ'
-                                      : 'Mark All Read',
-                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                _isSearchOpen
+                    ? Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isSearchOpen = false;
+                                _searchTerm = '';
+                                _searchController.clear();
+                              });
+                            },
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                             ),
                           ),
-                        const SizedBox(width: 4),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _showPostForm = !_showPostForm;
-                            });
-                          },
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: TextField(
+                                controller: _searchController,
+                                autofocus: true,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _searchTerm = val;
+                                  });
+                                },
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                                decoration: InputDecoration(
+                                  hintText: appState.language == 'mr'
+                                      ? 'वर्ग अपडेट शोधा...'
+                                      : appState.language == 'hi'
+                                          ? 'क्लास अपडेट खोजें...'
+                                          : 'Search class updates...',
+                                  hintStyle: const TextStyle(color: Colors.white70, fontSize: 13),
+                                  prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 18),
+                                  suffixIcon: _searchTerm.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.close, color: Colors.white70, size: 18),
+                                          onPressed: () {
+                                            setState(() {
+                                              _searchTerm = '';
+                                              _searchController.clear();
+                                            });
+                                          },
+                                        )
+                                      : null,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  isDense: true,
+                                ),
+                              ),
                             ),
-                            child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                        ],
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () => Navigator.pop(context),
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    appState.translate('classUpdate'),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (appState.unreadClassUpdatesCount > 0) ...[
+                                GestureDetector(
+                                  onTap: () async {
+                                    await appState.markAllClassUpdatesAsRead();
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            appState.language == 'mr'
+                                                ? 'सर्व वर्ग अपडेट वाचले म्हणून चिन्हांकित केले'
+                                                : appState.language == 'hi'
+                                                    ? 'सभी क्लास अपडेट पढ़े हुए चिह्नित किए गए'
+                                                    : 'All class updates marked as read',
+                                          ),
+                                          duration: const Duration(seconds: 2),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.done_all, color: Colors.white, size: 17),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _isSearchOpen = true;
+                                    _showPostForm = false;
+                                  });
+                                },
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.search, color: Colors.white, size: 17),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: _isRefreshing ? null : _handleRefresh,
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: _isRefreshing
+                                      ? const Center(
+                                          child: SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                          ),
+                                        )
+                                      : const Icon(Icons.refresh, color: Colors.white, size: 17),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _showPostForm = !_showPostForm;
+                                    if (_showPostForm) {
+                                      _isSearchOpen = false;
+                                    }
+                                  });
+                                },
+                                child: Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.2),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white, size: 18),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                const SizedBox(height: 14),
                 
                 // Tabs
                 Row(
@@ -793,7 +953,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                 ],
                 
                 // List Updates or Empty State
-                if (filteredUpdates.isEmpty && !_showPostForm) ...[
+                if (tabFiltered.isEmpty && !_showPostForm) ...[
                   Container(
                     margin: const EdgeInsets.only(top: 20),
                     padding: const EdgeInsets.all(28),
@@ -859,6 +1019,60 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (filteredUpdates.isEmpty && !_showPostForm) ...[
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.search_off_rounded, size: 32, color: AppColors.primary),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No Results Found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'No class updates match "$_searchTerm". Try searching with different keywords.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _searchTerm = '';
+                              _searchController.clear();
+                            });
+                          },
+                          child: const Text('Clear Search', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),

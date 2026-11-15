@@ -1,3 +1,4 @@
+import '../services/notification_navigation_service.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -38,6 +39,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         final appState = Provider.of<AppState>(context, listen: false);
         appState.fetchParentConversations();
+        NotificationNavigationService.checkInitialNotification();
+        NotificationNavigationService.requestPermissionAndRegister();
       }
     });
     // Auto-refresh chat conversations every 30s while active on HomeScreen

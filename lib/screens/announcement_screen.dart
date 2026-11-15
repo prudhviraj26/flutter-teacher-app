@@ -23,6 +23,12 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   bool _failedToSend = false;
   final List<AttachmentResult> _selectedAttachments = [];
 
+  // Search & Refresh state
+  bool _isSearchOpen = false;
+  String _searchTerm = '';
+  final TextEditingController _searchController = TextEditingController();
+  bool _isRefreshing = false;
+
   @override
   void initState() {
     super.initState();
@@ -35,7 +41,18 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   void dispose() {
     _titleController.dispose();
     _messageController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+    try {
+      await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   void _showOversizedFileDialog(AttachmentResult file) {
@@ -321,78 +338,233 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     final teacher = appState.teacher;
     final list = appState.announcements;
 
+    final filteredList = list.where((a) {
+      final q = _searchTerm.toLowerCase().trim();
+      if (q.isEmpty) return true;
+      return a.title.toLowerCase().contains(q) ||
+          a.message.toLowerCase().contains(q) ||
+          a.author.toLowerCase().contains(q) ||
+          (a.classScope != null && a.classScope!.toLowerCase().contains(q));
+    }).toList();
+
     return Scaffold(
       body: Column(
         children: [
           // Header
           Container(
             color: AppColors.secondary,
-            padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      appState.translate('classAnnouncement'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (appState.unreadAnnouncementsCount > 0)
-                      TextButton.icon(
-                        onPressed: () => appState.markAllAnnouncementsAsRead(),
-                        icon: const Icon(Icons.done_all, color: Colors.white, size: 16),
-                        label: Text(
-                          appState.language == 'mr'
-                              ? 'सर्व वाचले'
-                              : appState.language == 'hi'
-                                  ? 'सब पढ़ा हुआ'
-                                  : 'Mark All Read',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
+            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 8, 16, 16),
+            child: _isSearchOpen
+                ? Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _isSearchOpen = false;
+                            _searchTerm = '';
+                            _searchController.clear();
+                          });
+                        },
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
                         ),
                       ),
-                    const SizedBox(width: 4),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _showPostForm = !_showPostForm;
-                        });
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            autofocus: true,
+                            onChanged: (val) {
+                              setState(() {
+                                _searchTerm = val;
+                              });
+                            },
+                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: appState.language == 'mr'
+                                  ? 'सूचना शोधा...'
+                                  : appState.language == 'hi'
+                                      ? 'सूचना खोजें...'
+                                      : 'Search announcements...',
+                              hintStyle: const TextStyle(color: Colors.white70, fontSize: 13),
+                              prefixIcon: const Icon(Icons.search, color: Colors.white70, size: 18),
+                              suffixIcon: _searchTerm.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.close, color: Colors.white70, size: 18),
+                                      onPressed: () {
+                                        setState(() {
+                                          _searchTerm = '';
+                                          _searchController.clear();
+                                        });
+                                      },
+                                    )
+                                  : null,
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              isDense: true,
+                            ),
+                          ),
                         ),
-                        child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                    ],
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              child: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    appState.translate('classAnnouncement'),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (teacher?.assignedClass != null) ...[
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      teacher!.assignedClass!,
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.85),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (appState.unreadAnnouncementsCount > 0) ...[
+                            GestureDetector(
+                              onTap: () async {
+                                await appState.markAllAnnouncementsAsRead();
+                                if (mounted) {
+                                  _showSnackBar(
+                                    appState.language == 'mr'
+                                        ? 'सर्व सूचना वाचल्या म्हणून चिन्हांकित केल्या'
+                                        : appState.language == 'hi'
+                                            ? 'सभी घोषणाओं को पढ़ा हुआ चिह्नित किया गया'
+                                            : 'All announcements marked as read',
+                                    AppColors.success,
+                                  );
+                                }
+                              },
+                              child: Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(Icons.done_all, color: Colors.white, size: 17),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isSearchOpen = true;
+                                _showPostForm = false;
+                              });
+                            },
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.search, color: Colors.white, size: 17),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _isRefreshing ? null : _handleRefresh,
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: _isRefreshing
+                                  ? const Center(
+                                      child: SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.refresh, color: Colors.white, size: 17),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _showPostForm = !_showPostForm;
+                                if (_showPostForm) {
+                                  _isSearchOpen = false;
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white, size: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
           ),
           
           // Content
@@ -725,14 +897,70 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                   ),
                 ],
 
+                // Search no results state
+                if (list.isNotEmpty && filteredList.isEmpty && !_showPostForm) ...[
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                    ),
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.search_off_rounded, size: 32, color: AppColors.secondary),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No Results Found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1F2937),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'No announcements match "$_searchTerm". Try searching with different keywords.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _searchTerm = '';
+                              _searchController.clear();
+                            });
+                          },
+                          child: const Text('Clear Search', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // Active list
-                if (list.isNotEmpty)
+                if (filteredList.isNotEmpty)
                   ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: list.length,
+                  itemCount: filteredList.length,
                   itemBuilder: (context, index) {
-                    final item = list[index];
+                    final item = filteredList[index];
                     final isAuthoredByTeacher = (appState.teacher?.id != null && item.authorId == appState.teacher!.id) ||
                         (appState.teacher?.name != null && item.author.toLowerCase() == appState.teacher!.name.toLowerCase());
                     final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);

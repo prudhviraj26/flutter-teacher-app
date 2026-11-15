@@ -1,3 +1,4 @@
+import '../services/notification_navigation_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
@@ -411,7 +412,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         );
 
         if (widget.isFirstLogin) {
-          Navigator.pushReplacementNamed(context, '/home');
+          NotificationNavigationService.requestPermissionAndRegister();
+          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
         } else {
           Navigator.pop(context);
         }
@@ -445,13 +447,15 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       strengthText = 'Moderate';
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
-      body: Column(
-        children: [
-          _buildCustomAppBar(
-            context,
-            widget.isFirstLogin ? 'Set Permanent Password' : appState.translate('changePassword'),
+    return PopScope(
+      canPop: !widget.isFirstLogin,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF5F7FA),
+        body: Column(
+          children: [
+            _buildCustomAppBar(
+              context,
+              widget.isFirstLogin ? 'Set Permanent Password' : appState.translate('changePassword'),
             AppColors.primary,
             showBack: !widget.isFirstLogin,
             onBack: () => Navigator.pop(context),
@@ -563,9 +567,40 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             ),
                           ),
 
+                          // Password requirement helper (clean 1-line format like Parent App)
+                          const SizedBox(height: 8),
+                          Builder(
+                            builder: (context) {
+                              final isValid = strength == 5;
+                              final color = isValid ? AppColors.success : (newPwd.isNotEmpty ? Colors.grey.shade700 : Colors.grey);
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    isValid ? Icons.check_circle : Icons.info_outline,
+                                    size: 14,
+                                    color: color,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      isValid
+                                          ? 'Strong password requirements met'
+                                          : 'Min 8 chars with uppercase, lowercase, number & special char',
+                                      style: TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w500,
+                                        color: color,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
                           // Strength Meter
                           if (newPwd.isNotEmpty) ...[
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -583,13 +618,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                                 valueColor: AlwaysStoppedAnimation<Color>(strengthColor),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            // Security Checklist
-                            _buildRequirementItem('At least 8 characters', _hasMinLength(newPwd)),
-                            _buildRequirementItem('At least 1 uppercase letter (A-Z)', _hasUppercase(newPwd)),
-                            _buildRequirementItem('At least 1 lowercase letter (a-z)', _hasLowercase(newPwd)),
-                            _buildRequirementItem('At least 1 number (0-9)', _hasNumber(newPwd)),
-                            _buildRequirementItem('At least 1 special character', _hasSymbol(newPwd)),
                           ],
 
                           const SizedBox(height: 16),
@@ -642,6 +670,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

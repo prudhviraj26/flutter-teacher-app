@@ -56,6 +56,7 @@ class TeacherApp extends StatelessWidget {
           routes: {
             '/': (context) => const SplashScreen(),
             '/login': (context) => const LoginScreen(),
+            '/set-new-password': (context) => const ChangePasswordScreen(isFirstLogin: true),
             '/home': (context) => const HomeScreen(),
             '/profile': (context) => const ProfileScreen(),
             '/profile/language': (context) => const LanguageScreen(),
