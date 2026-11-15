@@ -397,21 +397,40 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         ),
                       ],
                     ),
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _showPostForm = !_showPostForm;
-                        });
-                      },
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (appState.unreadClassUpdatesCount > 0)
+                          TextButton.icon(
+                            onPressed: () => appState.markAllClassUpdatesAsRead(),
+                            icon: const Icon(Icons.done_all, color: Colors.white, size: 16),
+                            label: Text(
+                              appState.language == 'mr'
+                                  ? 'सर्व वाचले'
+                                  : appState.language == 'hi'
+                                      ? 'सब पढ़ा हुआ'
+                                      : 'Mark All Read',
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ),
+                        const SizedBox(width: 4),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _showPostForm = !_showPostForm;
+                            });
+                          },
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
+                          ),
                         ),
-                        child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -851,7 +870,9 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     itemCount: filteredUpdates.length,
                   itemBuilder: (context, index) {
                     final item = filteredUpdates[index];
-                    final isUnread = !appState.isNoticeRead(item.id);
+                    final isAuthoredByTeacher = (appState.teacher?.id != null && item.teacherId == appState.teacher!.id) ||
+                        (appState.teacher?.name != null && item.teacherName.toLowerCase() == appState.teacher!.name.toLowerCase());
+                    final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
                     final isHomework = item.type == 'Homework';
                     final iconBg = isHomework ? AppColors.secondary.withValues(alpha: 0.1) : AppColors.primary.withValues(alpha: 0.1);
                     final iconColor = isHomework ? AppColors.secondary : AppColors.primary;

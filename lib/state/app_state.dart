@@ -178,12 +178,26 @@ class AppState extends ChangeNotifier {
     }).length;
   }
 
-  int get unreadClassUpdatesCount =>
-      _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).length;
+  int get unreadClassUpdatesCount {
+    return _classUpdates.where((u) {
+      final isAuthoredByTeacher = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+          (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+      if (isAuthoredByTeacher) return false;
+      return !_readNoticeIds.contains(u.id);
+    }).length;
+  }
 
-  int get unreadParentMessagesCount => _parentConversations
-      .where((c) => c.unreadCount > 0 || c.unread || (c.messages.isNotEmpty && c.messages.last.failed))
-      .length;
+  int get unreadParentMessagesCount {
+    int total = 0;
+    for (final c in _parentConversations) {
+      if (c.unreadCount > 0) {
+        total += c.unreadCount;
+      } else if (c.unread) {
+        total += 1;
+      }
+    }
+    return total;
+  }
 
   int get totalUnreadCommunicationsCount =>
       unreadSchoolNoticesCount +
@@ -308,10 +322,11 @@ class AppState extends ChangeNotifier {
       }
     }
     
-    // Load cached notices and class updates immediately on startup
+    // Load cached notices, class updates, and parent conversations immediately on startup
     await _loadReadNoticeIds();
     await _loadCachedNotices();
     await _loadClassUpdates();
+    await _loadCachedParentConversations();
 
     notifyListeners();
 
@@ -885,12 +900,15 @@ class AppState extends ChangeNotifier {
           .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
           .toList();
 
-      // Sync backend read status into local read tracking
+      // Sync backend read status into local read tracking (auto-mark authored notices as read)
       for (final a in liveAnnouncements) {
-        if (a.isRead) {
+        final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+            (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+        if (a.isRead || isAuthoredByTeacher) {
           _readNoticeIds.add(a.id);
         }
       }
+      await _saveReadNoticeIds();
 
       // Sort newest first by fullDate/date
       ayAnnouncements.sort((a, b) {
@@ -1064,10 +1082,16 @@ class AppState extends ChangeNotifier {
           for (final u in _classUpdates) {
             mergedMap[u.id] = u;
           }
-          // Merge live server updates
+          // Merge live server updates and auto-mark self-authored updates as read
           for (final u in liveUpdates) {
             mergedMap[u.id] = u;
+            final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+                (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+            if (isAuthored) {
+              _readNoticeIds.add(u.id);
+            }
           }
+          await _saveReadNoticeIds();
           final mergedList = mergedMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
           mergedList.sort((a, b) => b.date.compareTo(a.date));
           _classUpdates = mergedList;
@@ -1375,12 +1399,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // Save parent conversations to SharedPreferences for instant badge rendering
+  Future<void> _saveParentConversations() async {
+    final teacherId = _teacher?.id ?? 'default';
+    try {
+      final jsonList = _parentConversations.map((c) => c.toJson()).toList();
+      await _prefs?.setString('veyho_teacher_parent_conversations_$teacherId', json.encode(jsonList));
+    } catch (e) {
+      debugPrint("Error saving parent conversations to storage: $e");
+    }
+  }
+
+  // Load cached parent conversations from storage immediately on startup
+  Future<void> _loadCachedParentConversations() async {
+    final teacherId = _teacher?.id ?? 'default';
+    final stored = _prefs?.getString('veyho_teacher_parent_conversations_$teacherId');
+    if (stored != null && stored.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(stored);
+        _parentConversations = list.map((item) => ParentConversation.fromJson(item as Map<String, dynamic>)).toList();
+        notifyListeners();
+      } catch (e) {
+        debugPrint("Error loading cached parent conversations: $e");
+      }
+    }
+  }
+
   // Parent chats operations
   Future<void> fetchParentConversations() async {
     try {
       final liveThreads = await TeacherDataService.fetchTeacherChatThreads();
       if (liveThreads.isNotEmpty) {
         _parentConversations = liveThreads;
+        await _saveParentConversations();
         notifyListeners();
       }
     } catch (e) {
@@ -1471,6 +1522,7 @@ class AppState extends ChangeNotifier {
       if (realThreadId.isNotEmpty) {
         TeacherDataService.markTeacherThreadRead(realThreadId).catchError((_) => false);
       }
+      _saveParentConversations();
       notifyListeners();
     }
   }

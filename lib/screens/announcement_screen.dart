@@ -356,21 +356,40 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     ),
                   ],
                 ),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _showPostForm = !_showPostForm;
-                    });
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      shape: BoxShape.circle,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (appState.unreadAnnouncementsCount > 0)
+                      TextButton.icon(
+                        onPressed: () => appState.markAllAnnouncementsAsRead(),
+                        icon: const Icon(Icons.done_all, color: Colors.white, size: 16),
+                        label: Text(
+                          appState.language == 'mr'
+                              ? 'सर्व वाचले'
+                              : appState.language == 'hi'
+                                  ? 'सब पढ़ा हुआ'
+                                  : 'Mark All Read',
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _showPostForm = !_showPostForm;
+                        });
+                      },
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
+                      ),
                     ),
-                    child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white),
-                  ),
+                  ],
                 ),
               ],
             ),
@@ -714,7 +733,9 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                   itemCount: list.length,
                   itemBuilder: (context, index) {
                     final item = list[index];
-                    final isUnread = !appState.isNoticeRead(item.id);
+                    final isAuthoredByTeacher = (appState.teacher?.id != null && item.authorId == appState.teacher!.id) ||
+                        (appState.teacher?.name != null && item.author.toLowerCase() == appState.teacher!.name.toLowerCase());
+                    final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
                     final isTeal = index % 2 == 0;
                     final iconBg = isTeal ? AppColors.primary.withValues(alpha: 0.1) : AppColors.secondary.withValues(alpha: 0.1);
                     final iconColor = isTeal ? AppColors.primary : AppColors.secondary;

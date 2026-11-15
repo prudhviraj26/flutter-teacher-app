@@ -763,7 +763,8 @@ class ParentChatScreen extends StatefulWidget {
 class _ParentChatScreenState extends State<ParentChatScreen> {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-    Timer? _pollingTimer;
+  final FocusNode _focusNode = FocusNode();
+  Timer? _pollingTimer;
 
   @override
   void initState() {
@@ -777,6 +778,18 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       appState.fetchTeacherThreadMessages(widget.parentId);
       _scrollToBottom();
     });
+
+    // Auto-scroll to latest message when keyboard pops up
+    _focusNode.addListener(() {
+      if (_focusNode.hasFocus) {
+        _scrollToBottom();
+      }
+    });
+
+    _msgController.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     _startPolling();
   }
 
@@ -795,6 +808,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     _pollingTimer?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -1005,10 +1019,14 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
           
           // Chat Messages
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(24),
-              itemCount: conv.messages.length,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: ListView.builder(
+                controller: _scrollController,
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(24),
+                itemCount: conv.messages.length,
               itemBuilder: (context, index) {
                 final msg = conv.messages[index];
                 final isTeacher = msg.sender == 'teacher';
@@ -1224,6 +1242,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
               },
             ),
           ),
+        ),
           
           //Composer bar
           Container(
@@ -1237,7 +1256,14 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _msgController,
+                      focusNode: _focusNode,
+                      keyboardType: TextInputType.text,
                       textCapitalization: TextCapitalization.sentences,
+                      enableSuggestions: true,
+                      autocorrect: true,
+                      textInputAction: TextInputAction.send,
+                      maxLines: 4,
+                      minLines: 1,
                       maxLength: 1000,
                       buildCounter: (context, {required currentLength, required isFocused, maxLength}) {
                         if (currentLength > 800) {
@@ -1264,14 +1290,24 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => _sendMessage(appState),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
-                      child: const Icon(Icons.send, color: Colors.white),
-                    ),
+                  Builder(
+                    builder: (context) {
+                      final canSend = _msgController.text.trim().isNotEmpty;
+                      return GestureDetector(
+                        onTap: canSend ? () => _sendMessage(appState) : null,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: canSend ? AppColors.secondary : AppColors.secondary.withValues(alpha: 0.35),
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.send, color: Colors.white, size: 20),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),

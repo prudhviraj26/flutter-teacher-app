@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isNavigating = false;
+  Timer? _homePollingTimer;
 
   void _safeNavigate(String routeName) {
     if (_isNavigating) return;
@@ -32,10 +34,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final appState = Provider.of<AppState>(context, listen: false);
+        appState.fetchParentConversations();
+      }
+    });
+    // Auto-refresh chat conversations every 30s while active on HomeScreen
+    _homePollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        final appState = Provider.of<AppState>(context, listen: false);
+        if (appState.loggedIn) {
+          appState.fetchParentConversations();
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _homePollingTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -46,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         final appState = Provider.of<AppState>(context, listen: false);
         appState.syncLiveData();
+        appState.fetchParentConversations();
       }
     }
   }

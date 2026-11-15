@@ -92,6 +92,13 @@ class AllSectionsScreen extends StatelessWidget {
             'route': '/announcement',
             'badgeCount': appState.unreadAnnouncementsCount,
           },
+          {
+            'name': appState.translate('parentConnect'),
+            'subtitle': appState.translate('messageParents'),
+            'icon': Icons.chat_bubble_outline,
+            'route': '/parent-connect',
+            'badgeCount': appState.unreadParentMessagesCount,
+          },
         ],
       },
       {
