@@ -39,6 +39,7 @@ class NotificationNavigationService {
 
   /// Active chat identifier currently open in view (suppresses foreground notification banners)
   static String? activeChatThreadId;
+  static String? activeChatParentId;
 
   /// Initializes Firebase and Local Notification subsystems safely
   static Future<void> initialize() async {
@@ -146,13 +147,18 @@ class NotificationNavigationService {
     if (notification == null) return;
 
     // Suppress notification banner if user currently has this chat thread open
-    final chatThread = message.data['threadId'] ?? message.data['parentId'];
-    if (activeChatThreadId != null &&
-        message.data['type'] == 'chat' &&
-        chatThread != null &&
-        (chatThread == activeChatThreadId)) {
-      debugPrint('[FCM Foreground] Suppressed heads-up banner for active chat thread $activeChatThreadId');
-      return;
+    final chatThread = message.data['threadId']?.toString();
+    final chatParent = message.data['parentId']?.toString();
+    final type = message.data['type']?.toString().toLowerCase();
+    if (type == 'chat' || type == 'parent_chat') {
+      final matchesThread = activeChatThreadId != null &&
+          (activeChatThreadId == chatThread || activeChatThreadId == chatParent);
+      final matchesParent = activeChatParentId != null &&
+          (activeChatParentId == chatParent || activeChatParentId == chatThread);
+      if (matchesThread || matchesParent) {
+        debugPrint('[FCM Foreground] Suppressed heads-up banner for active chat thread $chatThread / $chatParent');
+        return;
+      }
     }
 
     final androidDetails = AndroidNotificationDetails(
@@ -288,7 +294,20 @@ class NotificationNavigationService {
           } else if (type == 'class_update' || type == 'homework' || type == 'classwork') {
             appState.refreshClassUpdates();
           } else if (type == 'chat' || type == 'parent_chat') {
-            appState.fetchParentConversations();
+            final chatThread = data['threadId']?.toString();
+            final chatParent = data['parentId']?.toString();
+            final matchesThread = activeChatThreadId != null &&
+                (activeChatThreadId == chatThread || activeChatThreadId == chatParent);
+            final matchesParent = activeChatParentId != null &&
+                (activeChatParentId == chatParent || activeChatParentId == chatThread);
+            if (matchesThread || matchesParent) {
+              final target = chatParent ?? chatThread ?? activeChatParentId ?? activeChatThreadId;
+              if (target != null && target.isNotEmpty) {
+                appState.pollTeacherChatDelta(target);
+              }
+            } else {
+              appState.fetchParentConversations();
+            }
           } else if (type == 'attendance') {
             appState.fetchTodayAttendanceSession();
           } else {

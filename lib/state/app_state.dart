@@ -1430,6 +1430,20 @@ class AppState extends ChangeNotifier {
     try {
       final liveThreads = await TeacherDataService.fetchTeacherChatThreads();
       if (liveThreads.isNotEmpty) {
+        // Preserve active in-memory messages to prevent chat screen flickering/disappearing
+        for (final live in liveThreads) {
+          ParentConversation? existing;
+          for (final c in _parentConversations) {
+            if ((c.threadId != null && live.threadId != null && c.threadId == live.threadId) ||
+                (c.parentId.isNotEmpty && c.parentId == live.parentId)) {
+              existing = c;
+              break;
+            }
+          }
+          if (existing != null && existing.messages.isNotEmpty && live.messages.isEmpty) {
+            live.messages.addAll(existing.messages);
+          }
+        }
         _parentConversations = liveThreads;
         await _saveParentConversations();
         notifyListeners();
@@ -1546,6 +1560,7 @@ class AppState extends ChangeNotifier {
       final res = await TeacherDataService.fetchTeacherThreadMessages(realThreadId, since: latestTime);
       final msgsJson = res?['messages'] as List<dynamic>? ?? [];
       if (msgsJson.isNotEmpty) {
+        bool hasInbound = false;
         for (var m in msgsJson) {
           final parsed = ParentMessage.fromJson(m as Map<String, dynamic>);
           final existingIdx = _parentConversations[idx].messages.indexWhere((e) => e.id == parsed.id);
@@ -1554,10 +1569,20 @@ class AppState extends ChangeNotifier {
           } else {
             _parentConversations[idx].messages.add(parsed);
           }
+          if (parsed.sender == 'parent') {
+            hasInbound = true;
+          }
           _parentConversations[idx].lastMessage = parsed.text;
           try {
             _parentConversations[idx].lastMessageAt = DateTime.parse(parsed.timestamp);
           } catch (_) {}
+        }
+        // Since the teacher is actively watching this chat, automatically mark new incoming messages as read
+        if (hasInbound) {
+          _parentConversations[idx].unread = false;
+          _parentConversations[idx].unreadCount = 0;
+          TeacherDataService.markTeacherThreadRead(realThreadId).catchError((_) => false);
+          _saveParentConversations();
         }
         notifyListeners();
       }

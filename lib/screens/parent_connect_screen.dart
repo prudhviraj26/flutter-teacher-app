@@ -183,7 +183,9 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                       final existing = appState.parentConversations
                                           .where((c) => c.studentName == student.name);
                                       if (existing.isNotEmpty) {
-                                        Navigator.pushNamed(context, '/parent-connect/chat/${existing.first.parentId}');
+                                        Navigator.pushNamed(context, '/parent-connect/chat/${existing.first.parentId}').then((_) {
+                                          appState.fetchParentConversations();
+                                        });
                                         return;
                                       }
                                       
@@ -203,7 +205,9 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(content: Text('Chat started with parent of ${student.name}')),
                                       );
-                                      Navigator.pushNamed(context, '/parent-connect/chat/$newParentId');
+                                      Navigator.pushNamed(context, '/parent-connect/chat/$newParentId').then((_) {
+                                        appState.fetchParentConversations();
+                                      });
                                     },
                                   ),
                                 ),
@@ -482,9 +486,13 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                 ],
                               ),
                               child: InkWell(
-                                onTap: () {
+                                onTap: () async {
                                   appState.markChatAsRead(c.parentId);
-                                  Navigator.pushNamed(context, '/parent-connect/chat/${c.parentId}');
+                                  await Navigator.pushNamed(context, '/parent-connect/chat/${c.parentId}');
+                                  if (context.mounted) {
+                                    appState.markChatAsRead(c.parentId);
+                                    appState.fetchParentConversations();
+                                  }
                                 },
                                 borderRadius: BorderRadius.circular(20),
                                 child: Padding(
@@ -765,15 +773,31 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   Timer? _pollingTimer;
+  AppState? _appState;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appState = Provider.of<AppState>(context, listen: false);
+  }
 
   @override
   void initState() {
     super.initState();
     // Track active chat to suppress duplicate foreground push notification banner
-    NotificationNavigationService.activeChatThreadId = widget.parentId;
+    NotificationNavigationService.activeChatParentId = widget.parentId;
     // Mark conversation read on enter & fetch initial messages
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final appState = Provider.of<AppState>(context, listen: false);
+      ParentConversation? conv;
+      for (final c in appState.parentConversations) {
+        if (c.parentId == widget.parentId || c.threadId == widget.parentId) {
+          conv = c;
+          break;
+        }
+      }
+      NotificationNavigationService.activeChatThreadId = conv?.threadId ?? widget.parentId;
       appState.markChatAsRead(widget.parentId);
       appState.fetchTeacherThreadMessages(widget.parentId);
       _scrollToBottom();
@@ -805,10 +829,12 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   @override
   void dispose() {
     NotificationNavigationService.activeChatThreadId = null;
+    NotificationNavigationService.activeChatParentId = null;
     _pollingTimer?.cancel();
     _msgController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
+    _appState?.markChatAsRead(widget.parentId);
     super.dispose();
   }
 
