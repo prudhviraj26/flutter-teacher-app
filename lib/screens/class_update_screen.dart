@@ -373,9 +373,9 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       availableSubjects.addAll(['Mathematics', 'Science', 'English']);
     }
 
-    final tabFiltered = _filterType == 'All'
+    final tabFiltered = _filterType.toLowerCase() == 'all'
         ? appState.classUpdates
-        : appState.classUpdates.where((u) => u.type == _filterType).toList();
+        : appState.classUpdates.where((u) => u.type.toLowerCase() == _filterType.toLowerCase()).toList();
 
     final filteredUpdates = tabFiltered.where((u) {
       final q = _searchTerm.toLowerCase().trim();
@@ -577,6 +577,11 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                     _showPostForm = !_showPostForm;
                                     if (_showPostForm) {
                                       _isSearchOpen = false;
+                                      if (_filterType.toLowerCase() == 'homework') {
+                                        _type = 'Homework';
+                                      } else if (_filterType.toLowerCase() == 'classwork') {
+                                        _type = 'Classwork';
+                                      }
                                     }
                                   });
                                 },
@@ -599,11 +604,18 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                 // Tabs
                 Row(
                   children: ['All', 'Homework', 'Classwork'].map((f) {
-                    final isSelected = _filterType == f;
+                    final isSelected = _filterType.toLowerCase() == f.toLowerCase();
                     return Padding(
                       padding: const EdgeInsets.only(right: 8),
                       child: InkWell(
-                        onTap: () => setState(() => _filterType = f),
+                        onTap: () => setState(() {
+                          _filterType = f;
+                          if (f.toLowerCase() == 'homework') {
+                            _type = 'Homework';
+                          } else if (f.toLowerCase() == 'classwork') {
+                            _type = 'Classwork';
+                          }
+                        }),
                         borderRadius: BorderRadius.circular(20),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -680,7 +692,9 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           ),
                           
                         Text(
-                          appState.translate('postUpdate'),
+                          _type == 'Homework'
+                              ? (appState.language == 'mr' ? 'गृहपाठ जोडा' : appState.language == 'hi' ? 'गृहकार्य जोड़ें' : 'Post Homework')
+                              : (appState.language == 'mr' ? 'वर्गकार्य जोडा' : appState.language == 'hi' ? 'कक्षाकार्य जोड़ें' : 'Post Classwork'),
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
                         ),
                         const SizedBox(height: 12),
@@ -716,13 +730,13 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                   alignment: Alignment.center,
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   decoration: BoxDecoration(
-                                    color: _type == 'Homework' ? AppColors.primary : AppColors.primary.withValues(alpha: 0.1),
+                                    color: _type == 'Homework' ? AppColors.secondary : AppColors.secondary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
                                     appState.translate('homework'),
                                     style: TextStyle(
-                                      color: _type == 'Homework' ? Colors.white : AppColors.primary,
+                                      color: _type == 'Homework' ? Colors.white : AppColors.secondary,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -976,14 +990,18 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           width: 64,
                           height: 64,
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
+                            color: (_filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary).withValues(alpha: 0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.assignment_outlined, size: 32, color: AppColors.primary),
+                          child: Icon(
+                            _filterType.toLowerCase() == 'homework' ? Icons.assignment_outlined : Icons.menu_book,
+                            size: 32,
+                            color: _filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          _filterType == 'All'
+                          _filterType.toLowerCase() == 'all'
                               ? 'No Class Updates Yet'
                               : 'No $_filterType Updates',
                           style: const TextStyle(
@@ -994,7 +1012,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _filterType == 'All'
+                          _filterType.toLowerCase() == 'all'
                               ? 'Share homework assignments, classwork, and study materials with your classes.'
                               : 'No $_filterType entries recorded yet.',
                           textAlign: TextAlign.center,
@@ -1008,13 +1026,25 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                         ElevatedButton.icon(
                           onPressed: () {
                             setState(() {
+                              if (_filterType.toLowerCase() == 'homework') {
+                                _type = 'Homework';
+                              } else if (_filterType.toLowerCase() == 'classwork') {
+                                _type = 'Classwork';
+                              }
                               _showPostForm = true;
                             });
                           },
                           icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Post Class Update', style: TextStyle(fontWeight: FontWeight.bold)),
+                          label: Text(
+                            _filterType.toLowerCase() == 'homework'
+                                ? (appState.language == 'mr' ? 'गृहपाठ जोडा' : appState.language == 'hi' ? 'गृहकार्य जोड़ें' : 'Post Homework')
+                                : _filterType.toLowerCase() == 'classwork'
+                                    ? (appState.language == 'mr' ? 'वर्गकार्य जोडा' : appState.language == 'hi' ? 'कक्षाकार्य जोड़ें' : 'Post Classwork')
+                                    : (appState.language == 'mr' ? 'अपडेट जोडा' : appState.language == 'hi' ? 'अपडेट जोड़ें' : 'Post Class Update'),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
+                            backgroundColor: _filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1087,7 +1117,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     final isAuthoredByTeacher = (appState.teacher?.id != null && item.teacherId == appState.teacher!.id) ||
                         (appState.teacher?.name != null && item.teacherName.toLowerCase() == appState.teacher!.name.toLowerCase());
                     final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
-                    final isHomework = item.type == 'Homework';
+                    final isHomework = item.isHomework;
                     final iconBg = isHomework ? AppColors.secondary.withValues(alpha: 0.1) : AppColors.primary.withValues(alpha: 0.1);
                     final iconColor = isHomework ? AppColors.secondary : AppColors.primary;
 

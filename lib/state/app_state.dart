@@ -124,9 +124,13 @@ class AppState extends ChangeNotifier {
   final List<Duty> _duties = [];
   List<StaffNotice> _staffNotices = [];
   List<Notice> _notices = [];
-  final List<Event> _events = [];
+  List<Event> _events = [];
+  bool _isEventsLoading = false;
   final List<Album> _albums = [];
   List<Holiday> _holidays = [];
+  List<AcademicYearItem> _academicYears = [];
+  String? _selectedAcademicYearId;
+  bool _isHolidaysLoading = false;
   final List<ExamResult> _examResults = [];
 
   // Active Attendance Marking Session
@@ -222,8 +226,12 @@ class AppState extends ChangeNotifier {
   List<StaffNotice> get staffNotices => _staffNotices;
   List<Notice> get notices => _notices;
   List<Event> get events => _events;
+  bool get isEventsLoading => _isEventsLoading;
   List<Album> get albums => _albums;
   List<Holiday> get holidays => _holidays;
+  List<AcademicYearItem> get academicYears => _academicYears;
+  String? get selectedAcademicYearId => _selectedAcademicYearId;
+  bool get isHolidaysLoading => _isHolidaysLoading;
   List<ExamResult> get examResults => _examResults;
 
   Map<String, String> get tempAttendance => _tempAttendance;
@@ -479,15 +487,17 @@ class AppState extends ChangeNotifier {
           }
         }(),
 
-        // Pipeline 4: School holidays
+        // Pipeline 4: School holidays, academic years & school events
         () async {
           try {
-            final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
-            if (liveHolidays.isNotEmpty) {
-              _holidays = liveHolidays;
-            }
+            await fetchAcademicYearsAndHolidays(silent: true);
           } catch (hErr) {
             debugPrint("Error fetching live holidays: $hErr");
+          }
+          try {
+            await refreshEvents(silent: true);
+          } catch (eErr) {
+            debugPrint("Error fetching live events: $eErr");
           }
         }(),
 
@@ -842,13 +852,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Academic Year Check Helper (2026-04-01 to 2027-03-31)
+  // Academic Year Check Helper
   bool _isWithinCurrentAcademicYear(String? dateStr) {
     if (dateStr == null || dateStr.isEmpty) return true;
     try {
       final dt = DateTime.parse(dateStr);
-      final ayStart = DateTime(2026, 4, 1);
-      final ayEnd = DateTime(2027, 3, 31, 23, 59, 59);
+      AcademicYearItem? currentYear;
+      if (_academicYears.isNotEmpty) {
+        currentYear = _academicYears.firstWhere(
+          (y) => y.isCurrent,
+          orElse: () => _academicYears.first,
+        );
+      }
+      final ayStart = currentYear?.startDate ?? DateTime(2026, 4, 1);
+      final ayEnd = currentYear != null
+          ? DateTime(currentYear.endDate.year, currentYear.endDate.month, currentYear.endDate.day, 23, 59, 59)
+          : DateTime(2027, 3, 31, 23, 59, 59);
       return dt.isAfter(ayStart.subtract(const Duration(seconds: 1))) &&
              dt.isBefore(ayEnd.add(const Duration(seconds: 1)));
     } catch (_) {
@@ -1045,16 +1064,74 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Refresh Holidays from API
-  Future<void> refreshHolidays() async {
+  void setSelectedAcademicYear(String? yearId) {
+    if (_selectedAcademicYearId != yearId) {
+      _selectedAcademicYearId = yearId;
+      notifyListeners();
+      fetchAcademicYearsAndHolidays(yearId: yearId);
+      refreshEvents(yearId: yearId);
+    }
+  }
+
+  // Fetch Academic Years and Holidays from API
+  Future<void> fetchAcademicYearsAndHolidays({String? yearId, bool silent = false}) async {
     try {
-      final liveHolidays = await TeacherDataService.fetchSchoolHolidays();
-      if (liveHolidays.isNotEmpty) {
-        _holidays = liveHolidays;
+      if (!silent) {
+        _isHolidaysLoading = true;
         notifyListeners();
       }
+
+      // 1. Fetch academic years
+      final years = await TeacherDataService.fetchAcademicYears();
+      if (years.isNotEmpty) {
+        _academicYears = years;
+      }
+
+      // Determine target academic year
+      String? targetYearId = yearId ?? _selectedAcademicYearId;
+      if (targetYearId == null && _academicYears.isNotEmpty) {
+        final current = _academicYears.firstWhere(
+          (y) => y.isCurrent,
+          orElse: () => _academicYears.first,
+        );
+        targetYearId = current.id;
+      }
+      _selectedAcademicYearId = targetYearId;
+
+      // 2. Fetch holidays for target academic year
+      final liveHolidays = await TeacherDataService.fetchSchoolHolidays(academicYearId: targetYearId);
+      if (liveHolidays.isNotEmpty) {
+        _holidays = liveHolidays;
+        _holidays.sort((a, b) => a.fullDate.compareTo(b.fullDate));
+      }
     } catch (e) {
-      debugPrint("Error refreshing holidays: $e");
+      debugPrint("Error fetching academic years and holidays: $e");
+    } finally {
+      _isHolidaysLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // Refresh Holidays from API
+  Future<void> refreshHolidays({String? yearId}) async {
+    await fetchAcademicYearsAndHolidays(yearId: yearId, silent: false);
+  }
+
+  // Refresh Events from API
+  Future<void> refreshEvents({String? yearId, bool silent = false}) async {
+    try {
+      if (!silent) {
+        _isEventsLoading = true;
+        notifyListeners();
+      }
+      final targetYearId = yearId ?? _selectedAcademicYearId;
+      final liveEvents = await TeacherDataService.fetchEvents(academicYearId: targetYearId);
+      _events = liveEvents;
+    } catch (e) {
+      debugPrint("Error refreshing events: $e");
+    } finally {
+      _isEventsLoading = false;
+      notifyListeners();
     }
   }
 
@@ -1646,18 +1723,10 @@ class AppState extends ChangeNotifier {
   // Check if today is a registered holiday or weekend
   Holiday? getTodayHoliday() {
     final now = DateTime.now();
-    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final curMonth = months[now.month - 1];
-    final curDay = now.day.toString().padLeft(2, '0');
-    final curDayInt = now.day.toString();
-
     for (var h in _holidays) {
-      if (h.fullDate != null && h.fullDate == todayStr) {
-        return h;
-      }
-      if (h.month.toLowerCase() == curMonth.toLowerCase() &&
-          (h.date == curDay || h.date == curDayInt)) {
+      if (h.fullDate.year == now.year &&
+          h.fullDate.month == now.month &&
+          h.fullDate.day == now.day) {
         return h;
       }
     }

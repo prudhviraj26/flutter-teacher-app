@@ -252,6 +252,33 @@ class TeacherDataService {
     return null;
   }
 
+  // Fetch Academic Years
+  static Future<List<AcademicYearItem>> fetchAcademicYears() async {
+    try {
+      final response = await ApiService.get('/academic/years');
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => AcademicYearItem.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchAcademicYears error: $e');
+    }
+    return [];
+  }
+
   // Fetch School Holidays from Admin Portal
   static Future<List<Holiday>> fetchSchoolHolidays({String? academicYearId}) async {
     try {
@@ -279,6 +306,36 @@ class TeacherDataService {
       }
     } catch (e) {
       debugPrint('TeacherDataService.fetchSchoolHolidays error: $e');
+    }
+    return [];
+  }
+
+  // Fetch School Events
+  static Future<List<Event>> fetchEvents({String? academicYearId}) async {
+    try {
+      final String queryParam = (academicYearId != null && academicYearId.isNotEmpty)
+          ? '?academicYearId=$academicYearId'
+          : '';
+      final response = await ApiService.get('/school-events$queryParam');
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+
+      if (list != null) {
+        return list
+            .whereType<Map<String, dynamic>>()
+            .map((item) => Event.fromJson(item))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchEvents error: $e');
     }
     return [];
   }

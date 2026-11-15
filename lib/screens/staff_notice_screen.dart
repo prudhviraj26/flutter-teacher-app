@@ -1,5 +1,6 @@
 import '../widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
@@ -15,8 +16,19 @@ class StaffNoticeScreen extends StatefulWidget {
 class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
   bool _isFetching = false;
   bool _isSearchOpen = false;
+  bool _isBannerDismissed = false;
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
+
+  String _formatDate(String dateStr, String language) {
+    try {
+      final date = DateTime.parse(dateStr);
+      final locale = language == 'mr' ? 'mr_IN' : language == 'hi' ? 'hi_IN' : 'en_GB';
+      return DateFormat('d MMM yyyy', locale).format(date);
+    } catch (e) {
+      return dateStr;
+    }
+  }
 
   @override
   void initState() {
@@ -247,57 +259,49 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
               color: AppColors.secondary,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
                 children: [
                 // Info Banner
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7), // bg-amber-50
-                    border: Border.all(color: const Color(0xFFFDE68A)), // border-amber-200
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.error_outline, color: Color(0xFFD97706), size: 22),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              appState.language == 'mr'
-                                  ? 'प्रशासकीय सूचना फलक'
-                                  : appState.language == 'hi'
-                                      ? 'प्रशासनिक सूचना बोर्ड'
-                                      : 'Staff-Only Circulars',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF78350F),
-                              ),
+                if (!_isBannerDismissed) ...[
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF3C7), // bg-amber-50
+                      border: Border.all(color: const Color(0xFFFDE68A)), // border-amber-200
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Color(0xFFD97706), size: 15),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            appState.language == 'mr'
+                                ? 'केवळ शिक्षक आणि कर्मचाऱ्यांसाठी अधिकृत प्रशासकीय परिपत्रके'
+                                : appState.language == 'hi'
+                                    ? 'केवल शिक्षकों और कर्मचारियों के लिए आधिकारिक परिपत्र'
+                                    : 'Official circulars issued for teachers & staff',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF92400E),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              appState.language == 'mr'
-                                  ? 'तुम्ही शाळा प्रशासनाद्वारे केवळ शिक्षक आणि कर्मचाऱ्यांसाठी पाठवलेल्या अधिकृत सूचना पाहत आहात.'
-                                  : appState.language == 'hi'
-                                      ? 'आप स्कूल प्रशासन द्वारा केवल शिक्षकों और कर्मचारियों के लिए भेजी गई आधिकारिक सूचनाएं देख रहे हैं.'
-                                      : 'You are viewing official circulars issued by school administration specifically for teachers and staff.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFFB45309),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                        GestureDetector(
+                          onTap: () => setState(() => _isBannerDismissed = true),
+                          child: const Padding(
+                            padding: EdgeInsets.only(left: 6),
+                            child: Icon(Icons.close, size: 14, color: Color(0xFFB45309)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 10),
+                ],
                 
                 // List of notices
                 if (notices.isEmpty)
@@ -387,174 +391,191 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
                     itemCount: filteredNotices.length,
                     itemBuilder: (context, index) {
-                    final notice = filteredNotices[index];
-                    final isUnread = !appState.isNoticeRead(notice.id);
-                    final isTeal = index % 2 == 0;
-                    final iconBg = isTeal ? AppColors.primary.withValues(alpha: 0.1) : AppColors.secondary.withValues(alpha: 0.1);
-                    final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
+                      final notice = filteredNotices[index];
+                      final isUnread = !appState.isNoticeRead(notice.id);
+                      final isTeal = index % 2 == 0;
+                      final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
-                            width: isUnread ? 1.5 : 1.0,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x0A000000),
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            )
-                          ],
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            appState.markStaffNoticeAsRead(notice.id);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => StaffNoticeDetailScreen(
-                                  notice: notice,
-                                  themeColor: iconColor,
-                                ),
-                              ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        color: iconBg,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(Icons.campaign, color: iconColor),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isUnread ? iconColor.withValues(alpha: 0.35) : const Color(0xFFE2E8F0),
+                              width: isUnread ? 1.2 : 1.0,
+                            ),
+                            boxShadow: isUnread
+                                ? [
+                                    BoxShadow(
+                                      color: iconColor.withValues(alpha: 0.06),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 2),
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                  ]
+                                : const [
+                                    BoxShadow(
+                                      color: Color(0x04000000),
+                                      blurRadius: 3,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                          ),
+                          child: InkWell(
+                            onTap: () {
+                              appState.markStaffNoticeAsRead(notice.id);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => StaffNoticeDetailScreen(
+                                    notice: notice,
+                                    themeColor: iconColor,
+                                  ),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(14),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 34,
+                                        height: 34,
+                                        decoration: BoxDecoration(
+                                          color: isUnread ? iconColor.withValues(alpha: 0.1) : const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          Icons.campaign,
+                                          color: isUnread ? iconColor : const Color(0xFF64748B),
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                if (isUnread) ...[
+                                                  Container(
+                                                    width: 6.5,
+                                                    height: 6.5,
+                                                    margin: const EdgeInsets.only(right: 6),
+                                                    decoration: BoxDecoration(
+                                                      color: iconColor,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                  ),
+                                                ],
+                                                Expanded(
+                                                  child: Text(
+                                                    notice.title,
+                                                    style: TextStyle(
+                                                      fontSize: 13.5,
+                                                      fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                      color: isUnread ? const Color(0xFF1F2937) : const Color(0xFF334155),
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Row(
+                                              children: [
+                                                if (notice.category == 'Urgent') ...[
+                                                  Container(
+                                                    margin: const EdgeInsets.only(right: 5),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFFEE2E2),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: const Text(
+                                                      'URGENT',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Color(0xFFDC2626),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                                Expanded(
+                                                  child: Text(
+                                                    '${notice.author} • ${notice.category}',
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Color(0xFF64748B),
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Row(
-                                            children: [
-                                              if (isUnread)
-                                                Container(
-                                                  width: 8,
-                                                  height: 8,
-                                                  margin: const EdgeInsets.only(right: 6),
-                                                  decoration: BoxDecoration(
-                                                    color: iconColor,
-                                                    shape: BoxShape.circle,
-                                                  ),
-                                                ),
-                                              Expanded(
-                                                child: Text(
-                                                  notice.title,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                                                    color: const Color(0xFF1F2937),
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
+                                          Text(
+                                            _formatDate(notice.date, appState.language),
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Row(
-                                            children: [
-                                              Text(
-                                                notice.author,
-                                                style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                              ),
-                                              const SizedBox(width: 6),
-                                              const Text('•', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                              const SizedBox(width: 6),
-                                              const Icon(Icons.calendar_month, size: 12, color: Colors.grey),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                notice.date,
-                                                style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                              ),
-                                            ],
+                                          const SizedBox(width: 4),
+                                          const Icon(
+                                            Icons.chevron_right,
+                                            size: 16,
+                                            color: Color(0xFFCBD5E1),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  notice.message,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade700,
-                                    height: 1.4,
+                                    ],
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 12),
-                                const Divider(color: Color(0xFFF9FAFB)),
-                                const SizedBox(height: 6),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: notice.category == 'Urgent' ? Colors.red.shade50 : const Color(0xFFF3F4F6),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: notice.category == 'Urgent'
-                                            ? Border.all(color: Colors.red.shade100)
-                                            : null,
-                                      ),
+                                  if (notice.message.trim().isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 44),
                                       child: Text(
-                                        notice.category,
-                                        style: TextStyle(
-                                          color: notice.category == 'Urgent' ? Colors.red.shade600 : Colors.grey.shade600,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
+                                        notice.message.trim(),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF64748B),
+                                          height: 1.35,
                                         ),
-                                      ),
-                                    ),
-                                    Text(
-                                      appState.language == 'mr'
-                                          ? 'अधिक वाचा →'
-                                          : appState.language == 'hi'
-                                              ? 'और पढ़ें →'
-                                              : 'Read More →',
-                                      style: const TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
               ],
             ),
           ),

@@ -74,6 +74,7 @@ class TeacherApp extends StatelessWidget {
             '/all-sections': (context) => const AllSectionsScreen(),
             '/holidays': (context) => const HolidaysScreen(),
             '/events': (context) => const EventsScreen(),
+            '/events/detail': (context) => const EventDetailScreen(),
             '/gallery': (context) => const GalleryScreen(),
             '/profile/edit': (context) => const TeacherProfileDetailScreen(),
             '/profile/change-password': (context) => const ChangePasswordScreen(),

@@ -332,7 +332,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
                       child: Column(
                       children: [
-                        // 4 Stats Chips: PRESENT (Green), LEAVE (Rose), HALF DAY (Orange), HOLIDAYS (Grey)
+                        // 4 Stats Chips: PRESENT (Green), LEAVE (Rose), HALF DAY (Orange), HOLIDAYS (Sky Blue)
                         Row(
                           children: [
                             _buildStatChip('Present', '$presentCount', const Color(0xFFE0F2F1), const Color(0xFF00796B), const Color(0xFFB2DFDB)),
@@ -341,7 +341,7 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                             const SizedBox(width: 8),
                             _buildStatChip('Half Day', '$halfDayCount', const Color(0xFFFFF3E0), const Color(0xFFEA580C), const Color(0xFFFFE0B2)),
                             const SizedBox(width: 8),
-                            _buildStatChip('Holidays', '$holidayCount', const Color(0xFFECEFF1), const Color(0xFF455A64), const Color(0xFFCFD8DC)),
+                            _buildStatChip('Holidays', '$holidayCount', const Color(0xFFF0F9FF), const Color(0xFF026AA2), const Color(0xFFB9E6FE)),
                           ],
                         ),
                         const SizedBox(height: 24),
@@ -378,8 +378,9 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                                     _buildLegendItem(const Color(0xFF00897B), 'Present'),
                                     _buildLegendItem(const Color(0xFFE11D48), 'Leave'),
                                     _buildLegendItem(const Color(0xFFEA580C), 'Half Day'),
-                                    _buildLegendItem(const Color(0xFF455A64), 'Holiday'),
+                                    _buildLegendItem(const Color(0xFF026AA2), 'Holiday'),
                                     _buildLegendItem(const Color(0xFFB0BEC5), 'Weekend'),
+                                    _buildLegendItem(const Color(0xFF64748B), 'Not Marked'),
                                   ],
                                 ),
                               ),
@@ -711,6 +712,21 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
               const Text(
                 'L',
                 style: TextStyle(fontSize: 7, color: Color(0xFFE11D48), fontWeight: FontWeight.w900),
+              )
+            else if (!isFuture && day.isWorkingDay && (day.status == null || day.status!.isEmpty))
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 2),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Not Marked',
+                    style: TextStyle(
+                      fontSize: 6.5,
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
               ),
           ],
         ),

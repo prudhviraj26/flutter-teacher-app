@@ -257,28 +257,36 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
               child: filteredNotices.isNotEmpty
                   ? ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                       itemCount: filteredNotices.length,
                       itemBuilder: (context, index) {
                         final notice = filteredNotices[index];
                         final isUnread = !appState.isNoticeRead(notice.id);
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.only(bottom: 10),
                           child: Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isUnread ? AppColors.primary.withValues(alpha: 0.5) : const Color(0xFFE5E7EB),
-                                width: isUnread ? 1.5 : 1.0,
+                                color: isUnread ? AppColors.primary.withValues(alpha: 0.35) : const Color(0xFFE2E8F0),
+                                width: isUnread ? 1.2 : 1.0,
                               ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x0A000000),
-                                  blurRadius: 4,
-                                  offset: Offset(0, 2),
-                                )
-                              ],
+                              boxShadow: isUnread
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.primary.withValues(alpha: 0.06),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : const [
+                                      BoxShadow(
+                                        color: Color(0x04000000),
+                                        blurRadius: 3,
+                                        offset: Offset(0, 1),
+                                      ),
+                                    ],
                             ),
                             child: InkWell(
                               onTap: () {
@@ -290,113 +298,114 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                                   ),
                                 );
                               },
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(14),
                               child: Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
                                         Container(
-                                          width: 40,
-                                          height: 40,
+                                          width: 34,
+                                          height: 34,
                                           decoration: BoxDecoration(
-                                            color: AppColors.primary.withValues(alpha: 0.1),
-                                            shape: BoxShape.circle,
+                                            color: isUnread ? AppColors.primary.withValues(alpha: 0.1) : const Color(0xFFF1F5F9),
+                                            borderRadius: BorderRadius.circular(10),
                                           ),
-                                          child: const Icon(Icons.campaign, color: AppColors.primary),
+                                          child: Icon(
+                                            Icons.campaign,
+                                            color: isUnread ? AppColors.primary : const Color(0xFF64748B),
+                                            size: 18,
+                                          ),
                                         ),
-                                        const SizedBox(width: 12),
+                                        const SizedBox(width: 10),
                                         Expanded(
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                 children: [
-                                                  Expanded(
-                                                    child: Row(
-                                                      children: [
-                                                        if (isUnread)
-                                                          Container(
-                                                            width: 8,
-                                                            height: 8,
-                                                            margin: const EdgeInsets.only(right: 6),
-                                                            decoration: const BoxDecoration(
-                                                              color: AppColors.primary,
-                                                              shape: BoxShape.circle,
-                                                            ),
-                                                          ),
-                                                        Expanded(
-                                                          child: Text(
-                                                            notice.title,
-                                                            style: TextStyle(
-                                                              fontSize: 14,
-                                                              fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                                                              color: const Color(0xFF1F2937),
-                                                            ),
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                          ),
-                                                        ),
-                                                      ],
+                                                  if (isUnread) ...[
+                                                    Container(
+                                                      width: 6.5,
+                                                      height: 6.5,
+                                                      margin: const EdgeInsets.only(right: 6),
+                                                      decoration: const BoxDecoration(
+                                                        color: AppColors.primary,
+                                                        shape: BoxShape.circle,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    _formatDate(notice.date, appState.language),
-                                                    style: const TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors.grey,
+                                                  ],
+                                                  Expanded(
+                                                    child: Text(
+                                                      notice.title,
+                                                      style: TextStyle(
+                                                        fontSize: 13.5,
+                                                        fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                        color: isUnread ? const Color(0xFF1F2937) : const Color(0xFF334155),
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                     ),
                                                   ),
                                                 ],
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                notice.source,
+                                                notice.source.isNotEmpty
+                                                    ? '${notice.source} • School Notice'
+                                                    : 'School Notice',
                                                 style: const TextStyle(
                                                   fontSize: 11,
-                                                  color: AppColors.primary,
-                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFF64748B),
+                                                  fontWeight: FontWeight.w500,
                                                 ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ],
                                           ),
                                         ),
+                                        const SizedBox(width: 8),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _formatDate(notice.date, appState.language),
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                color: Color(0xFF94A3B8),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            const Icon(
+                                              Icons.chevron_right,
+                                              size: 16,
+                                              color: Color(0xFFCBD5E1),
+                                            ),
+                                          ],
+                                        ),
                                       ],
                                     ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      notice.body,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey.shade700,
-                                        height: 1.4,
-                                      ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    const Divider(color: Color(0xFFF9FAFB)),
-                                    const SizedBox(height: 4),
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        appState.language == 'mr'
-                                            ? 'अधिक वाचा →'
-                                            : appState.language == 'hi'
-                                                ? 'और पढ़ें →'
-                                                : 'Read More →',
-                                        style: const TextStyle(
-                                          color: AppColors.primary,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                    if (notice.body.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 44),
+                                        child: Text(
+                                          notice.body.trim(),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF64748B),
+                                            height: 1.35,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -407,7 +416,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                     )
                   : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                       children: [
                         if (_isFetching)
                           Padding(

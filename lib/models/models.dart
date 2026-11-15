@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 class Teacher {
   final String id;
   final String name;
@@ -289,6 +291,9 @@ class ClassUpdate {
   final List<String>? attachments;
   final String date;
 
+  bool get isHomework => type.toLowerCase() == 'homework';
+  bool get isClasswork => !isHomework;
+
   ClassUpdate({
     required this.id,
     required this.type,
@@ -541,15 +546,121 @@ class Event {
   final String time;
   final String location;
   final String description;
+  final String startDate;
+  final String endDate;
+  final String? startTime;
+  final String? endTime;
+  final bool isAllDay;
+  final String category; // 'CULTURAL' | 'ACADEMIC' | 'SPORTS' | 'GENERAL'
+  final String scope; // 'SCHOOL' | 'CLASS' | 'SECTION'
+  final String attendanceImpact;
 
   Event({
     required this.id,
     required this.title,
     required this.date,
     required this.time,
-    required this.location,
-    required this.description,
+    this.location = 'School Campus',
+    this.description = '',
+    this.startDate = '',
+    this.endDate = '',
+    this.startTime,
+    this.endTime,
+    this.isAllDay = false,
+    this.category = 'GENERAL',
+    this.scope = 'SCHOOL',
+    this.attendanceImpact = 'REGULAR_ATTENDANCE',
   });
+
+  factory Event.fromJson(Map<String, dynamic> json) {
+    final start = json['startDate']?.toString() ?? json['date']?.toString() ?? '';
+    final end = json['endDate']?.toString() ?? start;
+    final isAllDay = json['isAllDay'] as bool? ?? false;
+    final sTime = json['startTime']?.toString();
+    final eTime = json['endTime']?.toString();
+
+    // Format human-friendly time string
+    String formattedTime = json['time']?.toString() ?? '';
+    if (formattedTime.isEmpty) {
+      if (isAllDay) {
+        formattedTime = 'All Day';
+      } else if (sTime != null && sTime.isNotEmpty) {
+        formattedTime = eTime != null && eTime.isNotEmpty ? '$sTime - $eTime' : sTime;
+      } else {
+        formattedTime = 'All Day';
+      }
+    }
+
+    // Format human-friendly date string
+    String formattedDate = json['date']?.toString() ?? '';
+    if (formattedDate.isEmpty && start.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(start);
+        formattedDate = DateFormat('EEEE, d MMMM yyyy').format(dt);
+      } catch (_) {
+        formattedDate = start;
+      }
+    }
+
+    return Event(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Event',
+      date: formattedDate.isNotEmpty ? formattedDate : 'Upcoming',
+      time: formattedTime,
+      location: json['location']?.toString() ?? 'School Campus',
+      description: json['description']?.toString() ?? '',
+      startDate: start,
+      endDate: end,
+      startTime: sTime,
+      endTime: eTime,
+      isAllDay: isAllDay,
+      category: json['category']?.toString() ?? 'GENERAL',
+      scope: json['scope']?.toString() ?? 'SCHOOL',
+      attendanceImpact: json['attendanceImpact']?.toString() ?? 'REGULAR_ATTENDANCE',
+    );
+  }
+}
+
+class AcademicYearItem {
+  final String id;
+  final String name;
+  final DateTime startDate;
+  final DateTime endDate;
+  final bool isCurrent;
+
+  AcademicYearItem({
+    required this.id,
+    required this.name,
+    required this.startDate,
+    required this.endDate,
+    required this.isCurrent,
+  });
+
+  factory AcademicYearItem.fromJson(Map<String, dynamic> json) {
+    return AcademicYearItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      startDate: DateTime.tryParse(json['startDate']?.toString() ?? '') ?? DateTime.now(),
+      endDate: DateTime.tryParse(json['endDate']?.toString() ?? '') ?? DateTime.now(),
+      isCurrent: json['isCurrent'] == true,
+    );
+  }
+
+  String get formattedDuration {
+    final startFmt = DateFormat('MMM yyyy').format(startDate);
+    final endFmt = DateFormat('MMM yyyy').format(endDate);
+    return '$startFmt – $endFmt';
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'startDate': startDate.toIso8601String(),
+      'endDate': endDate.toIso8601String(),
+      'isCurrent': isCurrent,
+    };
+  }
 }
 
 class Photo {
@@ -582,9 +693,10 @@ class Holiday {
   final String month;
   final String? year;
   final String title;
-  final String type; // 'National' | 'Festival' | 'School'
-  final String? fullDate; // 'YYYY-MM-DD'
+  final String type; // 'National' | 'Festival' | 'School' | 'Gazetted' | 'Bank Holiday'
+  final String academicYearId;
   final String? description;
+  final DateTime fullDate;
 
   Holiday({
     required this.id,
@@ -594,38 +706,53 @@ class Holiday {
     this.year,
     required this.title,
     required this.type,
-    this.fullDate,
+    this.academicYearId = '',
     this.description,
-  });
+    DateTime? fullDate,
+  }) : fullDate = fullDate ?? DateTime.tryParse(date) ?? DateTime.now();
 
   factory Holiday.fromJson(Map<String, dynamic> json) {
-    final rawDate = json['date']?.toString() ?? '';
-    DateTime dt;
-    try {
-      dt = DateTime.parse(rawDate);
-    } catch (_) {
-      dt = DateTime.now();
+    final rawDate = (json['date'] ?? '').toString();
+    DateTime parsedDt;
+    if (rawDate.contains('-')) {
+      parsedDt = DateTime.tryParse(rawDate) ?? DateTime.now();
+    } else {
+      parsedDt = DateTime.now();
     }
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-    final dStr = dt.day.toString().padLeft(2, '0');
-    final mStr = months[dt.month - 1];
-    final dayStr = days[dt.weekday - 1];
-    final yearStr = dt.year.toString();
-    final fullDateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+    final dayName = json['day']?.toString() ?? DateFormat('EEEE').format(parsedDt);
+    final monthShort = json['month']?.toString() ?? DateFormat('MMM').format(parsedDt);
+    final dayNum = rawDate.contains('-')
+        ? DateFormat('dd').format(parsedDt)
+        : (json['date']?.toString() ?? '01');
 
     return Holiday(
-      id: json['id']?.toString() ?? '',
-      date: dStr,
-      day: dayStr,
-      month: mStr,
-      year: yearStr,
-      title: json['name'] ?? json['title'] ?? 'School Holiday',
-      type: json['type'] ?? 'National',
-      fullDate: fullDateStr,
+      id: (json['id'] ?? '').toString(),
+      date: dayNum,
+      day: dayName,
+      month: monthShort,
+      year: parsedDt.year.toString(),
+      title: (json['name'] ?? json['title'] ?? 'School Holiday').toString(),
+      type: (json['type'] ?? 'School').toString(),
+      academicYearId: (json['academicYearId'] ?? '').toString(),
       description: json['description']?.toString(),
+      fullDate: parsedDt,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'date': date,
+      'day': day,
+      'month': month,
+      'year': year,
+      'title': title,
+      'type': type,
+      'academicYearId': academicYearId,
+      'description': description,
+      'fullDate': fullDate.toIso8601String(),
+    };
   }
 }
 
