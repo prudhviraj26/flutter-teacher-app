@@ -14,6 +14,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  bool _isNavigating = false;
+
+  void _safeNavigate(String routeName) {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    Navigator.pushNamed(context, routeName).then((_) {
+      if (mounted) {
+        setState(() {
+          _isNavigating = false;
+        });
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -213,7 +227,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             : appState.translate('viewOnly'),
                         backgroundColor: AppColors.secondary,
                         badgeCount: appState.unreadAnnouncementsCount,
-                        onTap: () => Navigator.pushNamed(context, '/announcement'),
+                        onTap: () => _safeNavigate('/announcement'),
                       ),
                       // Class Update
                       MenuCard(
@@ -222,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         subtitle: appState.translate('homeworkAndClasswork'),
                         backgroundColor: AppColors.primary,
                         badgeCount: appState.unreadClassUpdatesCount,
-                        onTap: () => Navigator.pushNamed(context, '/class-update'),
+                        onTap: () => _safeNavigate('/class-update'),
                       ),
                       // Attendance
                       MenuCard(
@@ -230,12 +244,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         title: appState.translate('attendance'),
                         subtitle: appState.translate('markDailyAttendance'),
                         backgroundColor: AppColors.primary,
-                        onTap: () async {
-                          await appState.fetchTodayAttendanceSession();
-                          if (context.mounted) {
-                            Navigator.pushNamed(context, '/attendance');
-                          }
-                        },
+                        onTap: () => _safeNavigate('/attendance'),
                       ),
                       // Students
                       MenuCard(
@@ -243,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         title: appState.translate('students'),
                         subtitle: teacher.assignedClass ?? appState.translate('studentRoster'),
                         backgroundColor: AppColors.secondary,
-                        onTap: () => Navigator.pushNamed(context, '/students'),
+                        onTap: () => _safeNavigate('/students'),
                       ),
                       // Parent Connect
                       MenuCard(
@@ -252,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         subtitle: appState.translate('messageParents'),
                         backgroundColor: AppColors.secondary,
                         badgeCount: appState.unreadParentMessagesCount,
-                        onTap: () => Navigator.pushNamed(context, '/parent-connect'),
+                        onTap: () => _safeNavigate('/parent-connect'),
                       ),
                       // School Notice
                       MenuCard(
@@ -269,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 : 'View school circulars',
                         backgroundColor: AppColors.primary,
                         badgeCount: appState.unreadSchoolNoticesCount,
-                        onTap: () => Navigator.pushNamed(context, '/school-notice'),
+                        onTap: () => _safeNavigate('/school-notice'),
                       ),
                     ],
                   ),
@@ -278,7 +287,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   
                   // View All Section Button
                   ElevatedButton(
-                    onPressed: () => Navigator.pushNamed(context, '/all-sections'),
+                    onPressed: () => _safeNavigate('/all-sections'),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                       backgroundColor: AppColors.primary,

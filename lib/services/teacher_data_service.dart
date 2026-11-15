@@ -367,7 +367,7 @@ class TeacherDataService {
       final dateFrom = "${now.year - 1}-06-01"; // Academic year start window
       final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${sectionId != null ? '&sectionId=$sectionId' : ''}&pageSize=100';
 
-      final response = await ApiService.get('/attendance-reporting/student-list$query');
+      final response = await ApiService.get('/attendance/reports/student-list$query');
       final Map<String, double> map = {};
       List? items;
       if (response is Map && response['items'] is List) {
