@@ -1137,13 +1137,45 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadClassUpdates() async {
     final teacherId = _teacher?.id ?? 'default';
-    // 1. Instant local cache restore
+
+    String normalizeText(String s) {
+      var cleaned = s.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '');
+      cleaned = cleaned.replaceAll(RegExp(r'(?i)\b(regards|with regards|thanks|thank you)\b.*$', dotAll: true), '');
+      return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    }
+
+    String makeFingerprint(ClassUpdate u) {
+      var subj = u.subject.trim().toLowerCase();
+      if (subj.isEmpty || subj == 'general') {
+        if (u.title.toLowerCase().contains('science')) subj = 'science';
+        else if (u.title.toLowerCase().contains('math')) subj = 'mathematics';
+        else if (u.title.toLowerCase().contains('english')) subj = 'english';
+      }
+      final norm = normalizeText(u.description);
+      final core = norm.length > 40 ? norm.substring(0, 40) : norm;
+      return "${u.type.trim().toLowerCase()}_${subj}_$core";
+    }
+
+    // 1. Instant local cache restore with deduplication
     final stored = _prefs?.getString('veyho_teacher_class_updates_$teacherId');
     if (stored != null && stored.isNotEmpty) {
       try {
         final List<dynamic> list = json.decode(stored);
         final parsed = list.map((item) => ClassUpdate.fromJson(item as Map<String, dynamic>)).toList();
-        _classUpdates = parsed.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
+        
+        final Map<String, ClassUpdate> dedupMap = {};
+        for (final u in parsed) {
+          if (_isWithinCurrentAcademicYear(u.date)) {
+            final fp = makeFingerprint(u);
+            if (!dedupMap.containsKey(fp)) {
+              dedupMap[fp] = u;
+            } else if (dedupMap[fp]!.id.startsWith('CU') && !u.id.startsWith('CU')) {
+              // Prefer server-assigned UUID over temporary CU... id
+              dedupMap[fp] = u;
+            }
+          }
+        }
+        _classUpdates = dedupMap.values.toList();
         _classUpdates.sort((a, b) => b.date.compareTo(a.date));
       } catch (e) {
         debugPrint("Error loading class updates from storage: $e");
@@ -1155,22 +1187,31 @@ class AppState extends ChangeNotifier {
       try {
         final liveUpdates = await TeacherDataService.fetchClassUpdates();
         if (liveUpdates.isNotEmpty) {
-          final Map<String, ClassUpdate> mergedMap = {};
-          // Preserve any locally added updates
-          for (final u in _classUpdates) {
-            mergedMap[u.id] = u;
-          }
-          // Merge live server updates and auto-mark self-authored updates as read
+          final Map<String, ClassUpdate> dedupContentMap = {};
+
+          // 2a. Collapse server duplicates down to 1 item per content signature!
           for (final u in liveUpdates) {
-            mergedMap[u.id] = u;
-            final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
-                (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
-            if (isAuthored) {
-              _readNoticeIds.add(u.id);
+            final fp = makeFingerprint(u);
+            if (!dedupContentMap.containsKey(fp)) {
+              dedupContentMap[fp] = u;
+              final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+                  (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+              if (isAuthored) {
+                _readNoticeIds.add(u.id);
+              }
             }
           }
+
+          // 2b. Merge local updates only if not already present on server
+          for (final u in _classUpdates) {
+            final fp = makeFingerprint(u);
+            if (!dedupContentMap.containsKey(fp)) {
+              dedupContentMap[fp] = u;
+            }
+          }
+
           await _saveReadNoticeIds();
-          final mergedList = mergedMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
+          final mergedList = dedupContentMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
           mergedList.sort((a, b) => b.date.compareTo(a.date));
           _classUpdates = mergedList;
           await _saveClassUpdates();
@@ -1194,6 +1235,28 @@ class AppState extends ChangeNotifier {
 
   // Add Class Update with live API Sync to Web Admin Sent Items
   Future<void> addClassUpdate(ClassUpdate update, {List<dynamic>? rawAttachments}) async {
+    String normalizeText(String s) {
+      var cleaned = s.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '');
+      cleaned = cleaned.replaceAll(RegExp(r'(?i)\b(regards|with regards|thanks|thank you)\b.*$', dotAll: true), '');
+      return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+    }
+    String makeFingerprint(ClassUpdate u) {
+      var subj = u.subject.trim().toLowerCase();
+      if (subj.isEmpty || subj == 'general') {
+        if (u.title.toLowerCase().contains('science')) subj = 'science';
+        else if (u.title.toLowerCase().contains('math')) subj = 'mathematics';
+        else if (u.title.toLowerCase().contains('english')) subj = 'english';
+      }
+      final norm = normalizeText(u.description);
+      final core = norm.length > 40 ? norm.substring(0, 40) : norm;
+      return "${u.type.trim().toLowerCase()}_${subj}_$core";
+    }
+    final fp = makeFingerprint(update);
+    final exists = _classUpdates.any((u) => makeFingerprint(u) == fp);
+    if (exists) {
+      return;
+    }
+
     _classUpdates.insert(0, update);
     _readNoticeIds.add(update.id);
     await _saveReadNoticeIds();
@@ -1203,10 +1266,10 @@ class AppState extends ChangeNotifier {
     if (_loggedIn) {
       try {
         final broadcastTitle = "${update.subject}: ${update.title}";
-        final broadcastBody = "${update.description}${update.dueDate != null ? '\n\nDue Date: ${update.dueDate}' : ''}";
+        final broadcastBody = update.description;
         final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
         final broadcastType = update.type.toLowerCase() == 'classwork' ? 'classwork' : 'homework';
-        await TeacherDataService.createBroadcast(
+        final res = await TeacherDataService.createBroadcast(
           title: broadcastTitle,
           message: broadcastBody,
           targetType: hasSection ? 'section' : 'school',
@@ -1214,6 +1277,20 @@ class AppState extends ChangeNotifier {
           targetSectionId: hasSection ? _teacher!.sectionId : null,
           attachments: rawAttachments ?? update.attachments,
         );
+
+        // If server created successfully with ID, reconcile temporary CU ID to server UUID immediately
+        if (res != null && res['id'] != null) {
+          final serverId = res['id'].toString();
+          final idx = _classUpdates.indexWhere((u) => u.id == update.id);
+          if (idx != -1) {
+            _classUpdates[idx] = _classUpdates[idx].copyWith(id: serverId);
+            _readNoticeIds.remove(update.id);
+            _readNoticeIds.add(serverId);
+            await _saveReadNoticeIds();
+            await _saveClassUpdates();
+            notifyListeners();
+          }
+        }
       } catch (e) {
         debugPrint("Error syncing class update to API: $e");
       }

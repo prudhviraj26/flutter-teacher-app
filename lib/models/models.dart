@@ -308,6 +308,34 @@ class ClassUpdate {
     required this.date,
   });
 
+  ClassUpdate copyWith({
+    String? id,
+    String? type,
+    String? title,
+    String? description,
+    String? subject,
+    String? classTarget,
+    String? teacherId,
+    String? teacherName,
+    String? dueDate,
+    List<String>? attachments,
+    String? date,
+  }) {
+    return ClassUpdate(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      title: title ?? this.title,
+      description: description ?? this.description,
+      subject: subject ?? this.subject,
+      classTarget: classTarget ?? this.classTarget,
+      teacherId: teacherId ?? this.teacherId,
+      teacherName: teacherName ?? this.teacherName,
+      dueDate: dueDate ?? this.dueDate,
+      attachments: attachments ?? this.attachments,
+      date: date ?? this.date,
+    );
+  }
+
   factory ClassUpdate.fromJson(Map<String, dynamic> json) {
     return ClassUpdate(
       id: json['id'] as String? ?? '',

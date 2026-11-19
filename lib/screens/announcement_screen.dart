@@ -294,8 +294,8 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       title: title,
       message: message,
       author: appState.teacher?.name ?? "Teacher",
-      authorId: appState.teacher?.id ?? "T001",
-      classScope: appState.teacher?.assignedClass ?? "Grade 10 A",
+      authorId: appState.teacher?.id ?? "",
+      classScope: appState.teacher?.assignedClass ?? (appState.teacher?.assignedClasses?.isNotEmpty == true ? appState.teacher!.assignedClasses!.first : "All Classes"),
       date: dateStr,
       time: timeStr,
       scope: 'Class',
@@ -353,7 +353,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
           // Header
           Container(
             color: AppColors.secondary,
-            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 8, 16, 16),
+            padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 8, 16, 12),
             child: _isSearchOpen
                 ? Row(
                     children: [
@@ -574,7 +574,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
               color: AppColors.secondary,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
                 children: [
                 // Form Post
                 if (_showPostForm) ...[
@@ -638,7 +638,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                               const Icon(Icons.people_outline, size: 14, color: Colors.grey),
                               const SizedBox(width: 6),
                               Text(
-                                '${teacher?.assignedClass ?? "Grade 10 A"} — Class Parents',
+                                '${teacher?.assignedClass ?? (teacher?.assignedClasses?.isNotEmpty == true ? teacher!.assignedClasses!.first : "Assigned Classes")} — Class Parents',
                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
                               ),
                               const SizedBox(width: 4),
@@ -955,12 +955,9 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
 
                 // Active list
                 if (filteredList.isNotEmpty)
-                  ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: filteredList.length,
-                  itemBuilder: (context, index) {
-                    final item = filteredList[index];
+                  ...filteredList.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final item = entry.value;
                     final isAuthoredByTeacher = (appState.teacher?.id != null && item.authorId == appState.teacher!.id) ||
                         (appState.teacher?.name != null && item.author.toLowerCase() == appState.teacher!.name.toLowerCase());
                     final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
@@ -1125,8 +1122,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         ),
                       ),
                     );
-                  },
-                ),
+                  }),
               ],
             ),
           ),

@@ -209,7 +209,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
 
     // Class & Section details
     final String currentClass = teacher?.assignedClass ??
-        (students.isNotEmpty ? students.first.studentClass : 'Grade 10 A');
+        (students.isNotEmpty ? students.first.studentClass : '');
 
     // Formatted Today's Date
     final now = DateTime.now();
@@ -772,7 +772,7 @@ class AttendanceConfirmationScreen extends StatelessWidget {
 
     final teacher = appState.teacher;
     final String currentClass = teacher?.assignedClass ??
-        (appState.students.isNotEmpty ? appState.students.first.studentClass : 'Grade 10 A');
+        (appState.students.isNotEmpty ? appState.students.first.studentClass : '');
 
     final now = DateTime.now();
     final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1049,7 +1049,7 @@ class AttendanceConfirmationScreen extends StatelessWidget {
                           return;
                         }
 
-                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
+                        final success = await appState.submitAttendance(appState.teacher?.id ?? '');
                         if (context.mounted) {
                           if (success) {
                             Navigator.pushReplacementNamed(context, '/attendance/submitted');
@@ -1237,7 +1237,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
 
     final teacher = appState.teacher;
     final String currentClass = teacher?.assignedClass ??
-        (students.isNotEmpty ? students.first.studentClass : 'Grade 10 A');
+        (students.isNotEmpty ? students.first.studentClass : '');
 
     final now = DateTime.now();
     final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1541,7 +1541,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                           return;
                         }
 
-                        final success = await appState.submitAttendance(appState.teacher?.id ?? 'T001');
+                        final success = await appState.submitAttendance(appState.teacher?.id ?? '');
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).clearSnackBars();
                           if (success) {

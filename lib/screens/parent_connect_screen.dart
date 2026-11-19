@@ -463,7 +463,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                   child: conversations.isNotEmpty
                       ? ListView.builder(
                           physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 80),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
                         itemCount: conversations.length,
                         itemBuilder: (context, index) {
                           final c = conversations[index];
@@ -1055,7 +1055,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
               child: ListView.builder(
                 controller: _scrollController,
                 keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                 itemCount: conv.messages.length,
               itemBuilder: (context, index) {
                 final msg = conv.messages[index];

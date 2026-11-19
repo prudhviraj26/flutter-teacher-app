@@ -216,7 +216,7 @@ class AllSectionsScreen extends StatelessWidget {
           // List grouping
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
               itemCount: sections.length,
               itemBuilder: (context, index) {
                 final section = sections[index];

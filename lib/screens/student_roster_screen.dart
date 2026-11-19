@@ -14,7 +14,7 @@ class StudentRosterScreen extends StatefulWidget {
 
 class _StudentRosterScreenState extends State<StudentRosterScreen> {
   String _searchQuery = '';
-  String _activeFilter = 'all'; // 'all' | 'absent' | 'fees' | 'attendance'
+  String _activeFilter = 'all'; // 'all' | 'absent' | 'attendance'
   String _selectedClass = '';
 
   @override
@@ -50,7 +50,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
       }
     }
     if (availableClasses.isEmpty) {
-      availableClasses.add('Grade 10 A');
+      availableClasses.add('All Classes');
     }
 
     // Default selected class if not set or invalid
@@ -69,17 +69,13 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
 
     // Filter students by selected class
     List<Student> classStudents = allStudents.where((s) {
-      if (_selectedClass == 'All Classes' || availableClasses.length <= 1) {
+      if (_selectedClass == 'All Classes') {
         return true;
       }
       final sNorm = normalizeClassName(s.studentClass);
       final targetNorm = normalizeClassName(_selectedClass);
-      return sNorm.isEmpty || sNorm == targetNorm || s.studentClass == _selectedClass;
+      return sNorm == targetNorm || s.studentClass.trim().toLowerCase() == _selectedClass.trim().toLowerCase();
     }).toList();
-
-    if (classStudents.isEmpty && allStudents.isNotEmpty) {
-      classStudents = allStudents;
-    }
 
     // Sync live today's attendance status from active marking session
     for (var s in classStudents) {
@@ -93,23 +89,22 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     final int absentCount = appState.isAttendanceSubmittedToday
         ? classStudents.where((s) => s.absentToday).length
         : 0;
-    const int feesCount = 0;
     final int attendanceCount = classStudents.where((s) => s.attendancePercentage < 75).length;
 
     // Filtered list matching active tab & search query
     final filteredStudents = classStudents.where((student) {
-      final matchesSearch = student.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          student.rollNo.contains(_searchQuery) ||
-          student.enrollmentNo.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          student.parentName.toLowerCase().contains(_searchQuery.toLowerCase());
+      final q = _searchQuery.toLowerCase().trim();
+      final matchesSearch = q.isEmpty ||
+          student.name.toLowerCase().contains(q) ||
+          student.rollNo.toLowerCase().contains(q) ||
+          student.enrollmentNo.toLowerCase().contains(q) ||
+          student.parentName.toLowerCase().contains(q) ||
+          student.parentMobile.contains(q);
       if (!matchesSearch) return false;
 
       if (_activeFilter == 'absent') {
         if (!appState.isAttendanceSubmittedToday) return false;
         return student.absentToday;
-      }
-      if (_activeFilter == 'fees') {
-        return false;
       }
       if (_activeFilter == 'attendance') {
         return student.attendancePercentage < 75;
@@ -223,17 +218,15 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
             ),
           ),
 
-          // Squeezed 4 Filter Chips
+          // 3 Clear Filter Chips
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Row(
               children: [
                 _buildFilterChip('All', 'all', allCount, AppColors.secondary),
-                const SizedBox(width: 6),
-                _buildFilterChip('Absent', 'absent', absentCount, const Color(0xFFE11D48)),
-                const SizedBox(width: 6),
-                _buildFilterChip('Fee Due', 'fees', feesCount, const Color(0xFFEA580C)),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
+                _buildFilterChip('Absent Today', 'absent', absentCount, const Color(0xFFE11D48)),
+                const SizedBox(width: 8),
                 _buildFilterChip('Attn < 75%', 'attendance', attendanceCount, const Color(0xFFC62828)),
               ],
             ),
@@ -250,54 +243,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                 : RefreshIndicator(
                     onRefresh: () => appState.loadLiveData(),
                     color: AppColors.secondary,
-                    child: _activeFilter == 'fees'
-                        ? ListView(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            children: [
-                              SizedBox(height: MediaQuery.of(context).size.height * 0.12),
-                              Center(
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 24),
-                                  padding: const EdgeInsets.all(24),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: const [
-                                      BoxShadow(color: Color(0x0A000000), blurRadius: 10, offset: Offset(0, 4))
-                                    ],
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        width: 64,
-                                        height: 64,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFFFFF7ED),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: const Color(0xFFFFEDD5)),
-                                        ),
-                                        child: const Icon(Icons.account_balance_wallet_outlined, size: 32, color: Color(0xFFEA580C)),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      const Text(
-                                        'Fee Management In Development',
-                                        style: TextStyle(color: Color(0xFF1F2937), fontSize: 16, fontWeight: FontWeight.bold),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        'Fee dues, concession structures, and receipt tracking are currently being set up on the web admin portal and will be available soon.',
-                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12, height: 1.5),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        : _activeFilter == 'absent' && !appState.isAttendanceSubmittedToday
+                    child: _activeFilter == 'absent' && !appState.isAttendanceSubmittedToday
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 children: [
@@ -364,7 +310,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                               )
                             : filteredStudents.isNotEmpty
                                 ? ListView.builder(
-                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
                                     itemCount: filteredStudents.length,
                                     itemBuilder: (context, index) {
                                       final s = filteredStudents[index];
@@ -406,9 +352,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                                                     ),
                                                     alignment: Alignment.center,
                                                     child: Text(
-                                                      (s.rollNo.isNotEmpty && s.rollNo != '1')
-                                                          ? s.rollNo
-                                                          : (s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S'),
+                                                      s.name.isNotEmpty ? s.name[0].toUpperCase() : 'S',
                                                       style: TextStyle(
                                                         color: s.absentToday ? const Color(0xFFC62828) : AppColors.secondary,
                                                         fontWeight: FontWeight.bold,
@@ -705,10 +649,8 @@ class StudentProfileScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              (s.rollNo.isNotEmpty && s.rollNo != '1')
-                                  ? 'Roll No: ${s.rollNo} • ${s.studentClass}'
-                                  : s.studentClass,
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              '${s.studentClass}${s.enrollmentNo.isNotEmpty ? ' • GR: ${s.enrollmentNo}' : ''}',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
                             ),
                             const SizedBox(height: 6),
                             Row(
@@ -759,7 +701,7 @@ class StudentProfileScreen extends StatelessWidget {
           // Details List
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
               children: [
                 // Academic Info Card
                 _buildSectionCard(
@@ -768,7 +710,7 @@ class StudentProfileScreen extends StatelessWidget {
                   items: [
                     {'label': 'Class & Section', 'value': s.studentClass},
                     {'label': appState.translate('enrollmentNo'), 'value': s.enrollmentNo},
-                    {'label': 'Roll Number', 'value': s.rollNo.isNotEmpty ? s.rollNo : 'N/A'},
+                    {'label': 'Roll Number', 'value': s.rollNo.isNotEmpty ? s.rollNo : 'Not Assigned'},
                     {'label': 'Attendance Rate', 'value': '${s.attendancePercentage.toInt()}%'},
                   ],
                 ),
@@ -779,9 +721,9 @@ class StudentProfileScreen extends StatelessWidget {
                   icon: Icons.person_outline,
                   title: appState.translate('studentDetails'),
                   items: [
-                    {'label': appState.translate('dateOfBirth'), 'value': s.dateOfBirth},
+                    {'label': appState.translate('dateOfBirth'), 'value': _formatDob(s.dateOfBirth)},
                     {'label': appState.translate('gender'), 'value': s.gender},
-                    {'label': appState.translate('bloodGroup'), 'value': s.bloodGroup},
+                    {'label': appState.translate('bloodGroup'), 'value': s.bloodGroup.isNotEmpty ? s.bloodGroup : 'Not Specified'},
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -815,7 +757,7 @@ class StudentProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        s.address.isNotEmpty ? s.address : 'School Address on Record',
+                        s.address.isNotEmpty ? s.address : 'Not Provided',
                         style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
                       ),
                     ],
@@ -893,6 +835,22 @@ class StudentProfileScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  String _formatDob(String rawDob) {
+    if (rawDob.isEmpty) return 'Not Provided';
+    try {
+      final dt = DateTime.parse(rawDob.split('T')[0]);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final now = DateTime.now();
+      var age = now.year - dt.year;
+      if (now.month < dt.month || (now.month == dt.month && now.day < dt.day)) {
+        age--;
+      }
+      return "${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year} ($age yrs)";
+    } catch (_) {
+      return rawDob;
+    }
   }
 
   Widget _buildSectionCard({

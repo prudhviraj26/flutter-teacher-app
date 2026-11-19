@@ -119,7 +119,7 @@ class TeacherDataService {
   }
 
   // Post Broadcast / Class Announcement / Homework from Teacher App
-  static Future<bool> createBroadcast({
+  static Future<Map<String, dynamic>?> createBroadcast({
     required String title,
     required String message,
     required String targetType, // 'class' | 'section' | 'school' | 'staff_only'
@@ -144,10 +144,15 @@ class TeacherDataService {
         if (scheduledFor != null) 'scheduledFor': scheduledFor,
       };
       final res = await ApiService.post('/communication/broadcasts', payload);
-      return res != null;
+      if (res is Map<String, dynamic>) {
+        return res;
+      } else if (res != null) {
+        return {'success': true};
+      }
+      return null;
     } catch (e) {
       debugPrint('TeacherDataService.createBroadcast error: $e');
-      return false;
+      return null;
     }
   }
 
@@ -345,7 +350,7 @@ class TeacherDataService {
     final String id = json['id']?.toString() ?? 'S-UNK';
     final String rawName = json['fullName'] ??
         json['name'] ??
-        "${json['firstName'] ?? ''} ${json['lastName'] ?? ''}";
+        "${json['firstName'] ?? ''} ${json['middleName'] ?? ''} ${json['lastName'] ?? ''}";
     final String fullName = rawName.replaceAll(RegExp(r'\s+'), ' ').trim();
 
     final String rollNo = json['rollNumber']?.toString() ??
@@ -368,26 +373,26 @@ class TeacherDataService {
     if (studentClass.isEmpty && json['studentClass'] != null) {
       studentClass = json['studentClass'].toString();
     }
-    if (studentClass.isEmpty) {
-      studentClass = 'Grade 10 A';
-    }
 
     final primaryParent = json['primaryParent'] ??
         (json['parentContacts'] != null && (json['parentContacts'] as List).isNotEmpty
             ? json['parentContacts'][0]
             : null);
 
-    final String parentName = primaryParent != null 
-        ? (primaryParent['name'] ?? "${primaryParent['firstName'] ?? ''} ${primaryParent['lastName'] ?? ''}".trim())
-        : (json['parentName'] ?? 'Parent');
+    final String rawParentName = primaryParent != null 
+        ? (primaryParent['name'] ?? "${primaryParent['firstName'] ?? ''} ${primaryParent['middleName'] ?? ''} ${primaryParent['lastName'] ?? ''}".trim())
+        : (json['parentName'] ?? '');
+    final String parentName = (rawParentName.trim().toLowerCase() == 'parent' || rawParentName.trim().isEmpty)
+        ? ''
+        : rawParentName.replaceAll(RegExp(r'\s+'), ' ').trim();
     final String parentMobile = primaryParent?['mobilePrimary'] ?? primaryParent?['mobile'] ?? json['parentMobile'] ?? '';
     final String parentEmail = primaryParent?['email'] ?? json['parentEmail'] ?? '';
 
     final double attnPct = (json['attendancePercentage'] != null)
-        ? (double.tryParse(json['attendancePercentage'].toString()) ?? 0.0)
+        ? (double.tryParse(json['attendancePercentage'].toString()) ?? 100.0)
         : (json['attendancePercent'] != null
-            ? (double.tryParse(json['attendancePercent'].toString()) ?? 0.0)
-            : 0.0);
+            ? (double.tryParse(json['attendancePercent'].toString()) ?? 100.0)
+            : 100.0);
 
     final bool feeDefaulter = json['feeDefaulter'] == true || json['feeDue'] == true || json['hasDue'] == true;
     final bool absentToday = json['absentToday'] == true;
@@ -403,8 +408,8 @@ class TeacherDataService {
       parentName: parentName,
       parentMobile: parentMobile,
       parentEmail: parentEmail,
-      address: json['addressLine1'] ?? json['address'] ?? '',
-      bloodGroup: json['bloodGroup'] ?? 'B+',
+      address: json['addressLine1'] ?? json['addressLine'] ?? json['address'] ?? '',
+      bloodGroup: json['bloodGroup'] ?? 'Not Specified',
       emergencyContact: parentMobile.isNotEmpty ? parentMobile : (json['emergencyContact'] ?? ''),
       absentToday: absentToday,
       feeDefaulter: feeDefaulter,
@@ -486,7 +491,9 @@ class TeacherDataService {
       scope = 'Class';
     }
 
-    String date = '2026-05-10';
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    String date = todayStr;
     String time = '09:00 AM';
     if (json['createdAt'] != null) {
       try {
@@ -497,7 +504,7 @@ class TeacherDataService {
         final ampm = dt.hour >= 12 ? 'PM' : 'AM';
         time = '$h:$m $ampm';
       } catch (_) {
-        date = json['createdAt']?.toString().split('T')[0] ?? '2026-05-10';
+        date = json['createdAt']?.toString().split('T')[0] ?? todayStr;
       }
     }
 
@@ -644,26 +651,21 @@ class TeacherDataService {
       title = parts.sublist(1).join(':').trim();
     }
 
-    final String description = json['body'] ?? json['message'] ?? '';
+    String description = json['body'] ?? json['message'] ?? '';
+    description = description.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '').trim();
     final String teacherName = json['senderName'] ?? json['author'] ?? 'Teacher';
     final String teacherId = json['senderStaffId'] ?? json['authorId'] ?? '';
 
-    String date = '2026-05-10';
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    String date = todayStr;
     if (json['createdAt'] != null) {
       try {
         final dt = DateTime.parse(json['createdAt'].toString()).toLocal();
         date = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
       } catch (_) {
-        date = json['createdAt']?.toString().split('T')[0] ?? '2026-05-10';
+        date = json['createdAt']?.toString().split('T')[0] ?? todayStr;
       }
-    }
-
-    String? dueDate;
-    if (json['scheduledFor'] != null) {
-      try {
-        final dt = DateTime.parse(json['scheduledFor'].toString()).toLocal();
-        dueDate = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
-      } catch (_) {}
     }
 
     List<String>? attachments;
@@ -685,7 +687,7 @@ class TeacherDataService {
       classTarget: classTarget,
       teacherId: teacherId,
       teacherName: teacherName,
-      dueDate: dueDate,
+      dueDate: null,
       attachments: attachments,
       date: date,
     );
