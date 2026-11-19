@@ -772,12 +772,13 @@ class ParentChatScreen extends StatefulWidget {
   State<ParentChatScreen> createState() => _ParentChatScreenState();
 }
 
-class _ParentChatScreenState extends State<ParentChatScreen> {
+class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBindingObserver {
   final TextEditingController _msgController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   Timer? _pollingTimer;
   AppState? _appState;
+  double _previousBottomInset = 0.0;
 
   @override
   void didChangeDependencies() {
@@ -788,6 +789,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Track active chat to suppress duplicate foreground push notification banner
     NotificationNavigationService.activeChatParentId = widget.parentId;
     // Mark conversation read on enter & fetch initial messages
@@ -804,13 +806,15 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
       NotificationNavigationService.activeChatThreadId = conv?.threadId ?? widget.parentId;
       appState.markChatAsRead(widget.parentId);
       appState.fetchTeacherThreadMessages(widget.parentId);
-      _scrollToBottom();
+      _scrollToBottom(delayMs: 100);
+      _scrollToBottom(delayMs: 300);
     });
 
     // Auto-scroll to latest message when keyboard pops up
     _focusNode.addListener(() {
       if (_focusNode.hasFocus) {
-        _scrollToBottom();
+        _scrollToBottom(delayMs: 150);
+        _scrollToBottom(delayMs: 350);
       }
     });
 
@@ -832,6 +836,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     NotificationNavigationService.activeChatThreadId = null;
     NotificationNavigationService.activeChatParentId = null;
     _pollingTimer?.cancel();
@@ -842,14 +847,27 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    final bottomInset = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
+    if (bottomInset > _previousBottomInset && bottomInset > 100) {
+      // Virtual keyboard expanded: trigger dual-phase auto-scroll
+      _scrollToBottom(delayMs: 100);
+      _scrollToBottom(delayMs: 350);
+    }
+    _previousBottomInset = bottomInset;
+  }
+
+  void _scrollToBottom({int delayMs = 150}) {
+    Timer(Duration(milliseconds: delayMs), () {
+      if (!mounted || !_scrollController.hasClients) return;
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutQuad,
       );
-    }
+    });
   }
 
   void _sendMessage(AppState appState) {
@@ -1287,6 +1305,10 @@ class _ParentChatScreenState extends State<ParentChatScreen> {
                     child: TextField(
                       controller: _msgController,
                       focusNode: _focusNode,
+                      onTap: () {
+                        _scrollToBottom(delayMs: 150);
+                        _scrollToBottom(delayMs: 350);
+                      },
                       keyboardType: TextInputType.text,
                       textCapitalization: TextCapitalization.sentences,
                       enableSuggestions: true,
