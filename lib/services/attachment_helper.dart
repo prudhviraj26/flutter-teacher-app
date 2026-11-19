@@ -22,6 +22,38 @@ class AttachmentResult {
 class AttachmentHelper {
   static final ImagePicker _imagePicker = ImagePicker();
 
+  /// Generates clean, human-readable file names eliminating OS temporary cache names like scaled_39580.jpg
+  static String formatUnifiedFileName(String rawName, {required String source, int? index}) {
+    final ext = rawName.contains('.') ? rawName.split('.').last.toLowerCase() : 'jpg';
+    final now = DateTime.now();
+    final y = now.year.toString();
+    final m = now.month.toString().padLeft(2, '0');
+    final d = now.day.toString().padLeft(2, '0');
+    final hh = now.hour.toString().padLeft(2, '0');
+    final mm = now.minute.toString().padLeft(2, '0');
+    final ss = now.second.toString().padLeft(2, '0');
+    final dateSlug = '$y$m$d';
+    final timeSlug = '$hh$mm$ss';
+    final idxSuffix = index != null ? '_$index' : '';
+
+    if (source == 'camera') {
+      return 'Photo_${dateSlug}_$timeSlug$idxSuffix.$ext';
+    }
+
+    // Check if name is a generic OS/picker cache prefix (e.g. scaled_..., image_picker..., or numbers like 1000039580)
+    final isGenericCache = rawName.startsWith('scaled_') ||
+        rawName.startsWith('image_picker') ||
+        RegExp(r'^\d{5,}\.').hasMatch(rawName) ||
+        RegExp(r'^[a-f0-9-]{16,}\.').hasMatch(rawName);
+
+    if (isGenericCache) {
+      return 'Photo_${dateSlug}_$timeSlug$idxSuffix.$ext';
+    }
+
+    // Clean user original file name from file manager / genuine uploads
+    return rawName.replaceAll(RegExp(r'[^\w\s\.-]'), '_');
+  }
+
   // Open native camera
   static Future<AttachmentResult?> pickFromCamera() async {
     try {
@@ -34,7 +66,8 @@ class AttachmentHelper {
         try {
           length = await File(photo.path).length();
         } catch (_) {}
-        return AttachmentResult(name: photo.name, path: photo.path, sizeBytes: length);
+        final cleanName = formatUnifiedFileName(photo.name, source: 'camera');
+        return AttachmentResult(name: cleanName, path: photo.path, sizeBytes: length);
       }
     } catch (e) {
       debugPrint('Error opening camera: $e');
@@ -54,7 +87,8 @@ class AttachmentHelper {
         try {
           length = await File(image.path).length();
         } catch (_) {}
-        return AttachmentResult(name: image.name, path: image.path, sizeBytes: length);
+        final cleanName = formatUnifiedFileName(image.name, source: 'gallery');
+        return AttachmentResult(name: cleanName, path: image.path, sizeBytes: length);
       }
     } catch (e) {
       debugPrint('Error opening gallery: $e');
@@ -69,12 +103,18 @@ class AttachmentHelper {
         imageQuality: 85,
       );
       final List<AttachmentResult> results = [];
+      int idx = 1;
       for (final img in images) {
         int length = 0;
         try {
           length = await File(img.path).length();
         } catch (_) {}
-        results.add(AttachmentResult(name: img.name, path: img.path, sizeBytes: length));
+        final cleanName = formatUnifiedFileName(
+          img.name,
+          source: 'gallery',
+          index: images.length > 1 ? idx++ : null,
+        );
+        results.add(AttachmentResult(name: cleanName, path: img.path, sizeBytes: length));
       }
       return results;
     } catch (e) {
@@ -101,7 +141,8 @@ class AttachmentHelper {
               length = await File(file.path!).length();
             } catch (_) {}
           }
-          return AttachmentResult(name: file.name, path: file.path!, sizeBytes: length);
+          final cleanName = formatUnifiedFileName(file.name, source: 'file');
+          return AttachmentResult(name: cleanName, path: file.path!, sizeBytes: length);
         }
       }
     } catch (e) {
@@ -122,6 +163,7 @@ class AttachmentHelper {
       );
       if (result != null && result.files.isNotEmpty) {
         final List<AttachmentResult> results = [];
+        int idx = 1;
         for (final file in result.files) {
           if (file.path != null) {
             int length = file.size;
@@ -130,7 +172,12 @@ class AttachmentHelper {
                 length = await File(file.path!).length();
               } catch (_) {}
             }
-            results.add(AttachmentResult(name: file.name, path: file.path!, sizeBytes: length));
+            final cleanName = formatUnifiedFileName(
+              file.name,
+              source: 'file',
+              index: result.files.length > 1 ? idx++ : null,
+            );
+            results.add(AttachmentResult(name: cleanName, path: file.path!, sizeBytes: length));
           }
         }
         return results;

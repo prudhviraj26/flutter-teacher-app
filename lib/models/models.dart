@@ -151,6 +151,60 @@ class Student {
   }
 }
 
+class NoticeAttachment {
+  final String name;
+  final String url;
+  final int sizeBytes;
+  final String contentType;
+  final String? blobPath;
+
+  NoticeAttachment({
+    required this.name,
+    required this.url,
+    this.sizeBytes = 0,
+    this.contentType = '',
+    this.blobPath,
+  });
+
+  factory NoticeAttachment.fromJson(dynamic json) {
+    if (json is String) {
+      final uri = Uri.tryParse(json);
+      final fileName = uri != null && uri.pathSegments.isNotEmpty ? uri.pathSegments.last : json;
+      return NoticeAttachment(
+        name: fileName,
+        url: json,
+      );
+    }
+    if (json is Map) {
+      return NoticeAttachment(
+        name: (json['name'] ?? json['fileName'] ?? json['originalName'] ?? 'Attachment').toString(),
+        url: (json['readUrl'] ?? json['url'] ?? '').toString(),
+        sizeBytes: (json['sizeBytes'] is int)
+            ? json['sizeBytes'] as int
+            : int.tryParse(json['sizeBytes']?.toString() ?? '0') ?? 0,
+        contentType: (json['contentType'] ?? json['mimeType'] ?? '').toString(),
+        blobPath: json['blobPath']?.toString(),
+      );
+    }
+    return NoticeAttachment(name: 'Attachment', url: '');
+  }
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'url': url,
+    'sizeBytes': sizeBytes,
+    'contentType': contentType,
+    if (blobPath != null) 'blobPath': blobPath,
+  };
+
+  String get formattedSize {
+    if (sizeBytes <= 0) return '';
+    if (sizeBytes < 1024) return '$sizeBytes B';
+    if (sizeBytes < 1024 * 1024) return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+    return '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
 class Notice {
   final String id;
   final String source;
@@ -160,6 +214,7 @@ class Notice {
   final String body;
   final String? fullDate;
   final NoticeCta? cta;
+  final List<NoticeAttachment> attachments;
 
   Notice({
     required this.id,
@@ -170,6 +225,7 @@ class Notice {
     required this.body,
     this.fullDate,
     this.cta,
+    this.attachments = const [],
   });
 
   factory Notice.fromJson(Map<String, dynamic> json) {
@@ -181,6 +237,9 @@ class Notice {
       time: json['time'] as String? ?? '',
       body: json['body'] as String? ?? '',
       fullDate: json['fullDate'] as String?,
+      attachments: (json['attachments'] is List)
+          ? (json['attachments'] as List).map((a) => NoticeAttachment.fromJson(a)).toList()
+          : const [],
     );
   }
 
@@ -192,6 +251,7 @@ class Notice {
     'time': time,
     'body': body,
     'fullDate': fullDate,
+    'attachments': attachments.map((a) => a.toJson()).toList(),
   };
 }
 
@@ -214,6 +274,7 @@ class Announcement {
   final String scope; // 'Class' | 'School' | 'Staff'
   final String? fullDate;
   final List<String>? attachments;
+  final List<NoticeAttachment> attachmentObjects;
   final bool isRead;
 
   Announcement({
@@ -228,6 +289,7 @@ class Announcement {
     required this.scope,
     this.fullDate,
     this.attachments,
+    this.attachmentObjects = const [],
     this.isRead = false,
   });
 }
@@ -241,6 +303,7 @@ class StaffNotice {
   final String time;
   final String category; // 'General' | 'Meeting' | 'Duty' | 'Urgent'
   final String? fullDate;
+  final List<NoticeAttachment> attachments;
 
   StaffNotice({
     required this.id,
@@ -251,6 +314,7 @@ class StaffNotice {
     required this.time,
     required this.category,
     this.fullDate,
+    this.attachments = const [],
   });
 
   factory StaffNotice.fromJson(Map<String, dynamic> json) {
@@ -263,6 +327,9 @@ class StaffNotice {
       time: json['time'] as String? ?? '',
       category: json['category'] as String? ?? 'General',
       fullDate: json['fullDate'] as String?,
+      attachments: (json['attachments'] is List)
+          ? (json['attachments'] as List).map((a) => NoticeAttachment.fromJson(a)).toList()
+          : const [],
     );
   }
 
@@ -275,6 +342,7 @@ class StaffNotice {
     'time': time,
     'category': category,
     'fullDate': fullDate,
+    'attachments': attachments.map((a) => a.toJson()).toList(),
   };
 }
 
@@ -289,6 +357,7 @@ class ClassUpdate {
   final String teacherName;
   final String? dueDate;
   final List<String>? attachments;
+  final List<NoticeAttachment> attachmentObjects;
   final String date;
 
   bool get isHomework => type.toLowerCase() == 'homework';
@@ -305,6 +374,7 @@ class ClassUpdate {
     required this.teacherName,
     this.dueDate,
     this.attachments,
+    this.attachmentObjects = const [],
     required this.date,
   });
 
@@ -319,6 +389,7 @@ class ClassUpdate {
     String? teacherName,
     String? dueDate,
     List<String>? attachments,
+    List<NoticeAttachment>? attachmentObjects,
     String? date,
   }) {
     return ClassUpdate(
@@ -332,11 +403,22 @@ class ClassUpdate {
       teacherName: teacherName ?? this.teacherName,
       dueDate: dueDate ?? this.dueDate,
       attachments: attachments ?? this.attachments,
+      attachmentObjects: attachmentObjects ?? this.attachmentObjects,
       date: date ?? this.date,
     );
   }
 
   factory ClassUpdate.fromJson(Map<String, dynamic> json) {
+    final rawAtts = json['attachments'];
+    List<NoticeAttachment> attObjs = [];
+    List<String> strAtts = [];
+    if (rawAtts is List) {
+      for (final a in rawAtts) {
+        final obj = NoticeAttachment.fromJson(a);
+        attObjs.add(obj);
+        strAtts.add(obj.name);
+      }
+    }
     return ClassUpdate(
       id: json['id'] as String? ?? '',
       type: json['type'] as String? ?? 'Classwork',
@@ -347,7 +429,8 @@ class ClassUpdate {
       teacherId: json['teacherId'] as String? ?? '',
       teacherName: json['teacherName'] as String? ?? '',
       dueDate: json['dueDate'] as String?,
-      attachments: (json['attachments'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      attachments: strAtts,
+      attachmentObjects: attObjs,
       date: json['date'] as String? ?? '',
     );
   }
@@ -363,7 +446,9 @@ class ClassUpdate {
       'teacherId': teacherId,
       'teacherName': teacherName,
       'dueDate': dueDate,
-      'attachments': attachments,
+      'attachments': attachmentObjects.isNotEmpty
+          ? attachmentObjects.map((a) => a.toJson()).toList()
+          : attachments,
       'date': date,
     };
   }
@@ -503,11 +588,11 @@ class ParentConversation {
     DateTime? lAt;
     if (json['lastMessageAt'] != null) {
       try {
-        lAt = DateTime.parse(json['lastMessageAt'].toString());
+        lAt = DateTime.parse(json['lastMessageAt'].toString()).toLocal();
       } catch (_) {}
     } else if (msgs.isNotEmpty) {
       try {
-        lAt = DateTime.parse(msgs.last.timestamp);
+        lAt = DateTime.parse(msgs.last.timestamp).toLocal();
       } catch (_) {}
     }
 

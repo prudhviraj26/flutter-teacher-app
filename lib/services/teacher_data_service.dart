@@ -513,14 +513,20 @@ class TeacherDataService {
         json['targetSectionName'] ??
         (targetType == 'class' || targetType == 'section' ? 'Class Notice' : null);
 
-    List<String>? attachments;
+    final List<NoticeAttachment> attachmentObjects = [];
+    final List<String> stringAttachments = [];
     if (json['attachments'] is List) {
-      attachments = (json['attachments'] as List).map((a) {
-        if (a is Map) return (a['url'] ?? a['fileName'] ?? '').toString();
-        return a.toString();
-      }).where((s) => s.isNotEmpty).toList();
+      for (final a in json['attachments']) {
+        final obj = NoticeAttachment.fromJson(a);
+        attachmentObjects.add(obj);
+        stringAttachments.add(obj.name);
+      }
     } else if (json['mediaUrls'] is List) {
-      attachments = (json['mediaUrls'] as List).map((m) => m.toString()).toList();
+      for (final m in json['mediaUrls']) {
+        final obj = NoticeAttachment.fromJson(m);
+        attachmentObjects.add(obj);
+        stringAttachments.add(obj.name);
+      }
     }
 
     final bool isRead = json['isRead'] == true || json['is_read'] == true;
@@ -536,7 +542,8 @@ class TeacherDataService {
       time: time,
       scope: scope,
       fullDate: json['createdAt']?.toString(),
-      attachments: attachments,
+      attachments: stringAttachments,
+      attachmentObjects: attachmentObjects,
       isRead: isRead,
     );
   }
@@ -668,12 +675,14 @@ class TeacherDataService {
       }
     }
 
-    List<String>? attachments;
+    final List<NoticeAttachment> attachmentObjects = [];
+    final List<String> stringAttachments = [];
     if (json['attachments'] is List) {
-      attachments = (json['attachments'] as List).map((a) {
-        if (a is Map) return (a['name'] ?? a['fileName'] ?? a['url'] ?? '').toString();
-        return a.toString();
-      }).where((s) => s.isNotEmpty).toList();
+      for (final a in json['attachments']) {
+        final obj = NoticeAttachment.fromJson(a);
+        attachmentObjects.add(obj);
+        stringAttachments.add(obj.name);
+      }
     }
 
     final String classTarget = json['targetSectionName'] ?? json['targetClassName'] ?? 'All';
@@ -688,7 +697,8 @@ class TeacherDataService {
       teacherId: teacherId,
       teacherName: teacherName,
       dueDate: null,
-      attachments: attachments,
+      attachments: stringAttachments,
+      attachmentObjects: attachmentObjects,
       date: date,
     );
   }

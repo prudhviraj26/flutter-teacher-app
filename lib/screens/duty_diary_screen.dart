@@ -363,29 +363,6 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
                           padding: const EdgeInsets.all(20),
                           child: Column(
                             children: [
-                              // Legend Strip
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF9FAFB),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                child: Wrap(
-                                  alignment: WrapAlignment.center,
-                                  spacing: 12,
-                                  runSpacing: 6,
-                                  children: [
-                                    _buildLegendItem(const Color(0xFF00897B), 'Present'),
-                                    _buildLegendItem(const Color(0xFFE11D48), 'Leave'),
-                                    _buildLegendItem(const Color(0xFFEA580C), 'Half Day'),
-                                    _buildLegendItem(const Color(0xFF026AA2), 'Holiday'),
-                                    _buildLegendItem(const Color(0xFFB0BEC5), 'Weekend'),
-                                    _buildLegendItem(const Color(0xFF64748B), 'Not Marked'),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-
                               // Weekday Headers
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -554,24 +531,6 @@ class _DutyDiaryScreenState extends State<DutyDiaryScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildLegendItem(Color color, String label) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey),
-        ),
-      ],
     );
   }
 

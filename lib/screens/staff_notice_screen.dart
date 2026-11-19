@@ -2,6 +2,7 @@ import '../widgets/bottom_nav_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../services/attachment_local_store.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
@@ -742,73 +743,106 @@ class StaffNoticeDetailScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 24),
                     
-                    // Actions
-                    const Divider(color: Color(0xFFF3F4F6)),
-                    const SizedBox(height: 12),
-                    
-                    _buildActionItem(
-                      icon: Icons.download_outlined,
-                      color: themeColor,
-                      label: appState.language == 'mr'
-                          ? 'अधिकृत परिपत्रक डाउनलोड करा'
-                          : appState.language == 'hi'
-                              ? 'आधिकारिक परिपत्रक डाउनलोड करें'
-                              : 'Download PDF Circular',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Downloading official PDF circular...')),
+                    // Attachments Section
+                    if (notice.attachments.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      const Divider(color: Color(0xFFF3F4F6)),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Icon(Icons.attach_file, color: themeColor, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'ATTACHMENTS (${notice.attachments.length})',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: themeColor,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...notice.attachments.map((att) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: ListTile(
+                            leading: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: themeColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                att.name.toLowerCase().endsWith('.pdf')
+                                    ? Icons.picture_as_pdf
+                                    : Icons.insert_drive_file_outlined,
+                                color: themeColor,
+                                size: 18,
+                              ),
+                            ),
+                            title: Text(
+                              att.name,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF374151),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: att.formattedSize.isNotEmpty
+                                ? Text(att.formattedSize, style: const TextStyle(fontSize: 11, color: Colors.grey))
+                                : null,
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: themeColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.remove_red_eye_outlined, size: 14, color: themeColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'View',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: themeColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            onTap: () async {
+                              final key = att.blobPath?.isNotEmpty == true ? att.blobPath! : att.url;
+                              await AttachmentLocalStore.openAttachment(
+                                context: context,
+                                key: key,
+                                url: att.url,
+                                dateStr: notice.fullDate ?? notice.date,
+                                originalFileName: att.name,
+                              );
+                            },
+                          ),
                         );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    _buildActionItem(
-                      icon: Icons.share_outlined,
-                      color: themeColor,
-                      label: appState.language == 'mr'
-                          ? 'इतरांसह शेअर करा'
-                          : appState.language == 'hi'
-                              ? 'दूसरों के साथ साझा करें'
-                              : 'Share Notice Circular',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Sharing link copied to clipboard!')),
-                        );
-                      },
-                    ),
+                      }),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActionItem({
-    required IconData icon,
-    required Color color,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF4B5563),
-          ),
-        ),
-        trailing: const Icon(Icons.arrow_forward, size: 16, color: Colors.grey),
-        onTap: onTap,
       ),
     );
   }

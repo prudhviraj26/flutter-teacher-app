@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../services/attachment_helper.dart';
 import '../services/mobile_compressor.dart';
 import '../services/teacher_data_service.dart';
+import '../services/attachment_local_store.dart';
 import '../widgets/upload_progress_dialog.dart';
 
 class AnnouncementScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class AnnouncementScreen extends StatefulWidget {
 
 class _AnnouncementScreenState extends State<AnnouncementScreen> {
   bool _showPostForm = false;
+  bool _isPosting = false;
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   bool _failedToSend = false;
@@ -172,151 +174,146 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   }
 
   Future<void> _handlePost(AppState appState) async {
-    final title = _titleController.text;
-    final message = _messageController.text;
+    if (_isPosting) return;
+    setState(() => _isPosting = true);
 
-    if (title.trim().isEmpty) {
-      _showSnackBar(appState.translate('pleaseEnterTitle'), AppColors.destructive);
-      return;
-    }
-    if (message.trim().isEmpty) {
-      _showSnackBar(appState.translate('pleaseEnterMessage'), AppColors.destructive);
-      return;
-    }
+    try {
+      final title = _titleController.text;
+      final message = _messageController.text;
 
-    // Dynamic failure simulation trigger
-    if (title.toLowerCase().contains('fail') ||
-        title.toLowerCase().contains('error') ||
-        message.toLowerCase().contains('fail') ||
-        message.toLowerCase().contains('error')) {
-      setState(() {
-        _failedToSend = true;
-      });
-      _showSnackBar('Transmission failed. Announcement saved to drafts.', AppColors.destructive);
-      return;
-    }
+      if (title.trim().isEmpty) {
+        _showSnackBar(appState.translate('pleaseEnterTitle'), AppColors.destructive);
+        return;
+      }
+      if (message.trim().isEmpty) {
+        _showSnackBar(appState.translate('pleaseEnterMessage'), AppColors.destructive);
+        return;
+      }
 
-    final List<Map<String, dynamic>> uploadedAttachmentMeta = [];
-    final List<String> attachmentNames = [];
+      // Dynamic failure simulation trigger
+      if (title.toLowerCase().contains('fail') ||
+          title.toLowerCase().contains('error') ||
+          message.toLowerCase().contains('fail') ||
+          message.toLowerCase().contains('error')) {
+        setState(() {
+          _failedToSend = true;
+        });
+        _showSnackBar('Transmission failed. Announcement saved to drafts.', AppColors.destructive);
+        return;
+      }
 
-    // Compress & upload attachments with dynamic progress dialog
-    if (_selectedAttachments.isNotEmpty) {
-      final totalFiles = _selectedAttachments.length;
-      final fileIndexNotifier = ValueNotifier<int>(1);
-      final progressNotifier = ValueNotifier<double>(0.0);
+      final List<Map<String, dynamic>> uploadedAttachmentMeta = [];
+      final List<String> attachmentNames = [];
 
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          return AnimatedBuilder(
-            animation: Listenable.merge([fileIndexNotifier, progressNotifier]),
-            builder: (ctx, _) {
-              return UploadProgressDialog(
-                fileIndex: fileIndexNotifier.value,
-                totalFiles: totalFiles,
-                progress: progressNotifier.value,
-              );
-            },
-          );
-        },
-      );
+      // Compress & upload attachments with simple file count progress dialog
+      if (_selectedAttachments.isNotEmpty) {
+        final totalFiles = _selectedAttachments.length;
+        final fileIndexNotifier = ValueNotifier<int>(1);
+        final progressNotifier = ValueNotifier<double>(0.0);
 
-      try {
-        for (int i = 0; i < totalFiles; i++) {
-          final att = _selectedAttachments[i];
-          fileIndexNotifier.value = i + 1;
-          attachmentNames.add(att.name);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return AnimatedBuilder(
+              animation: Listenable.merge([fileIndexNotifier, progressNotifier]),
+              builder: (ctx, _) {
+                return UploadProgressDialog(
+                  fileIndex: fileIndexNotifier.value,
+                  totalFiles: totalFiles,
+                  progress: progressNotifier.value,
+                );
+              },
+            );
+          },
+        );
 
-          // 1. Client-side compression (0% - 40% of this file)
-          final file = File(att.path);
-          final compResult = await MobileCompressor.compressAttachment(
-            file,
-            onProgress: (p) {
-              final overall = (i + (p * 0.4)) / totalFiles;
-              progressNotifier.value = overall;
-            },
-          );
+        try {
+          for (int i = 0; i < totalFiles; i++) {
+            final att = _selectedAttachments[i];
+            fileIndexNotifier.value = i + 1;
+            progressNotifier.value = i / totalFiles;
+            attachmentNames.add(att.name);
 
-          // 2. Upload compressed file (40% - 100% of this file)
-          final uploadRes = await TeacherDataService.uploadAttachment(
-            compResult.file,
-            onProgress: (sent, total) {
-              if (total > 0) {
-                final fileP = sent / total;
-                final overall = (i + 0.4 + (fileP * 0.6)) / totalFiles;
-                progressNotifier.value = overall;
-              }
-            },
-          );
+            // 1. Client-side compression runs smoothly in background
+            final file = File(att.path);
+            final compResult = await MobileCompressor.compressAttachment(file);
 
-          // 3. Upload thumbnail if generated (images/videos)
-          String? thumbBlobPath;
-          String? thumbUrl;
-          if (compResult.thumbnailFile != null) {
-            try {
-              final thumbRes = await TeacherDataService.uploadAttachment(compResult.thumbnailFile!);
-              if (thumbRes != null) {
-                thumbBlobPath = thumbRes['blobPath']?.toString();
-                thumbUrl = thumbRes['readUrl']?.toString();
-              }
-            } catch (_) {}
+            // 2. Upload compressed file
+            final uploadRes = await TeacherDataService.uploadAttachment(compResult.file);
+
+            // 3. Upload thumbnail if generated (images/videos)
+            String? thumbBlobPath;
+            String? thumbUrl;
+            if (compResult.thumbnailFile != null) {
+              try {
+                final thumbRes = await TeacherDataService.uploadAttachment(compResult.thumbnailFile!);
+                if (thumbRes != null) {
+                  thumbBlobPath = thumbRes['blobPath']?.toString();
+                  thumbUrl = thumbRes['readUrl']?.toString();
+                }
+              } catch (_) {}
+            }
+
+            if (uploadRes != null) {
+              uploadedAttachmentMeta.add({
+                'name': att.name,
+                'blobPath': uploadRes['blobPath'],
+                'sizeBytes': compResult.compressedSizeBytes,
+                'contentType': uploadRes['contentType'] ?? 'application/octet-stream',
+                'type': compResult.type,
+                if (thumbBlobPath != null) 'thumbnailBlobPath': thumbBlobPath,
+                if (thumbUrl != null) 'thumbnailUrl': thumbUrl,
+              });
+            }
+            progressNotifier.value = (i + 1) / totalFiles;
           }
-
-          if (uploadRes != null) {
-            uploadedAttachmentMeta.add({
-              'name': att.name,
-              'blobPath': uploadRes['blobPath'],
-              'sizeBytes': compResult.compressedSizeBytes,
-              'contentType': uploadRes['contentType'] ?? 'application/octet-stream',
-              'type': compResult.type,
-              if (thumbBlobPath != null) 'thumbnailBlobPath': thumbBlobPath,
-              if (thumbUrl != null) 'thumbnailUrl': thumbUrl,
-            });
+        } catch (e) {
+          debugPrint('Error uploading attachments: $e');
+        } finally {
+          if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
           }
-          progressNotifier.value = (i + 1) / totalFiles;
-        }
-      } catch (e) {
-        debugPrint('Error uploading attachments: $e');
-      } finally {
-        if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
-          Navigator.of(context, rootNavigator: true).pop();
         }
       }
-    }
 
-    final now = DateTime.now();
-    final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+      final now = DateTime.now();
+      final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-    final newAnn = Announcement(
-      id: "A${now.millisecondsSinceEpoch}",
-      title: title,
-      message: message,
-      author: appState.teacher?.name ?? "Teacher",
-      authorId: appState.teacher?.id ?? "",
-      classScope: appState.teacher?.assignedClass ?? (appState.teacher?.assignedClasses?.isNotEmpty == true ? appState.teacher!.assignedClasses!.first : "All Classes"),
-      date: dateStr,
-      time: timeStr,
-      scope: 'Class',
-      fullDate: now.toIso8601String(),
-      attachments: attachmentNames.isNotEmpty ? attachmentNames : null,
-    );
+      final newAnn = Announcement(
+        id: "A${now.millisecondsSinceEpoch}",
+        title: title,
+        message: message,
+        author: appState.teacher?.name ?? "Teacher",
+        authorId: appState.teacher?.id ?? "",
+        classScope: appState.teacher?.assignedClass ?? (appState.teacher?.assignedClasses?.isNotEmpty == true ? appState.teacher!.assignedClasses!.first : "All Classes"),
+        date: dateStr,
+        time: timeStr,
+        scope: 'Class',
+        fullDate: now.toIso8601String(),
+        attachments: attachmentNames.isNotEmpty ? attachmentNames : null,
+      );
 
-    await appState.addAnnouncement(
-      newAnn,
-      rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
-    );
+      await appState.addAnnouncement(
+        newAnn,
+        rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
+      );
 
-    if (mounted) {
-      _showSnackBar(appState.translate('announcementPosted'), AppColors.success);
-      _titleController.clear();
-      _messageController.clear();
-      setState(() {
-        _selectedAttachments.clear();
-        _showPostForm = false;
-        _failedToSend = false;
-      });
+      if (mounted) {
+        _showSnackBar(appState.translate('announcementPosted'), AppColors.success);
+        _titleController.clear();
+        _messageController.clear();
+        setState(() {
+          _selectedAttachments.clear();
+          _showPostForm = false;
+          _failedToSend = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPosting = false);
+      }
     }
   }
 
@@ -789,13 +786,19 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                           children: [
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: () => _handlePost(appState),
+                                onPressed: _isPosting ? null : () => _handlePost(appState),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
-                                child: Text(appState.translate('sendAnnouncement'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                child: _isPosting
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      )
+                                    : Text(appState.translate('sendAnnouncement'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1337,7 +1340,7 @@ class AnnouncementDetailScreen extends StatelessWidget {
                     ],
 
                     // Attachments Section
-                    if (announcement.attachments != null && announcement.attachments!.isNotEmpty) ...[
+                    if ((announcement.attachmentObjects.isNotEmpty) || (announcement.attachments != null && announcement.attachments!.isNotEmpty)) ...[
                       const SizedBox(height: 24),
                       const Text(
                         'Attachments',
@@ -1350,42 +1353,87 @@ class AnnouncementDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Column(
-                        children: announcement.attachments!.map((att) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5F7FA),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: ListTile(
-                              leading: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AttachmentHelper.getFileColor(att).withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  AttachmentHelper.getFileIcon(att),
-                                  color: AttachmentHelper.getFileColor(att),
-                                ),
+                        children: List.generate(
+                          announcement.attachmentObjects.isNotEmpty
+                              ? announcement.attachmentObjects.length
+                              : (announcement.attachments?.length ?? 0),
+                          (index) {
+                            final NoticeAttachment att = announcement.attachmentObjects.isNotEmpty
+                                ? announcement.attachmentObjects[index]
+                                : NoticeAttachment.fromJson(announcement.attachments![index]);
+                            final fileName = att.name;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
                               ),
-                              title: Text(
-                                att,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1F2937),
+                              child: ListTile(
+                                leading: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AttachmentHelper.getFileColor(fileName).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    AttachmentHelper.getFileIcon(fileName),
+                                    color: AttachmentHelper.getFileColor(fileName),
+                                  ),
                                 ),
+                                title: Text(
+                                  fileName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: att.formattedSize.isNotEmpty
+                                    ? Text(att.formattedSize, style: const TextStyle(fontSize: 11, color: Colors.grey))
+                                    : null,
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.remove_red_eye_outlined, size: 14, color: AppColors.primary),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'View',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                onTap: () async {
+                                  final key = att.blobPath?.isNotEmpty == true
+                                      ? att.blobPath!
+                                      : (att.url.isNotEmpty ? att.url : att.name);
+                                  await AttachmentLocalStore.openAttachment(
+                                    context: context,
+                                    key: key,
+                                    url: att.url,
+                                    dateStr: announcement.fullDate ?? announcement.date,
+                                    originalFileName: att.name,
+                                  );
+                                },
                               ),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Opening $att...')),
-                                );
-                              },
-                            ),
-                          );
-                        }).toList(),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],

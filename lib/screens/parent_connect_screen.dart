@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
@@ -235,6 +236,28 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
         );
       },
     );
+  }
+
+  String _formatConvTimeLabel(ParentConversation c) {
+    if (c.timeLabel == 'Just now') return 'Just now';
+    final dt = c.lastMessageAt;
+    if (dt == null) return c.timeLabel ?? 'Recent';
+    final localDt = dt.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final msgDate = DateTime(localDt.year, localDt.month, localDt.day);
+    final diffDays = today.difference(msgDate).inDays;
+
+    if (diffDays == 0) {
+      final hour12 = localDt.hour == 0 ? 12 : (localDt.hour > 12 ? localDt.hour - 12 : localDt.hour);
+      final period = localDt.hour >= 12 ? 'PM' : 'AM';
+      return "$hour12:${localDt.minute.toString().padLeft(2, '0')} $period";
+    } else if (diffDays == 1) {
+      return 'Yesterday';
+    } else if (localDt.year == now.year) {
+      return "${localDt.day}/${localDt.month}";
+    }
+    return "${localDt.day}/${localDt.month}/${localDt.year}";
   }
 
   @override
@@ -569,7 +592,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
-                                                      c.timeLabel ?? 'Recent',
+                                                      _formatConvTimeLabel(c),
                                                       style: TextStyle(
                                                         fontSize: 10,
                                                         fontWeight: FontWeight.bold,
@@ -920,10 +943,56 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
     );
   }
 
+  DateTime? _parseMessageDate(String ts) {
+    if (ts.isEmpty) return null;
+    try {
+      return DateTime.parse(ts).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Widget _buildDateSeparator(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final msgDate = DateTime(date.year, date.month, date.day);
+    final diffDays = today.difference(msgDate).inDays;
+
+    String text;
+    if (diffDays == 0) {
+      text = 'Today';
+    } else if (diffDays == 1) {
+      text = 'Yesterday';
+    } else if (date.year == now.year) {
+      text = DateFormat('d MMMM').format(date);
+    } else {
+      text = DateFormat('d MMMM yyyy').format(date);
+    }
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.only(top: 8, bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE2E8F0),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF475569),
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatMsgTime(String ts) {
     if (ts.isEmpty) return '';
     try {
-      final dt = DateTime.parse(ts);
+      final dt = DateTime.parse(ts).toLocal();
       final hour12 = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
       final period = dt.hour >= 12 ? 'PM' : 'AM';
       return "$hour12:${dt.minute.toString().padLeft(2, '0')} $period";
@@ -1080,8 +1149,25 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
                 final isTeacher = msg.sender == 'teacher';
                 final isFailed = msg.failed;
 
+                final currDate = _parseMessageDate(msg.timestamp);
+                bool showDateSeparator = false;
+                if (currDate != null) {
+                  if (index == 0) {
+                    showDateSeparator = true;
+                  } else {
+                    final prevDate = _parseMessageDate(conv.messages[index - 1].timestamp);
+                    if (prevDate == null ||
+                        prevDate.year != currDate.year ||
+                        prevDate.month != currDate.month ||
+                        prevDate.day != currDate.day) {
+                      showDateSeparator = true;
+                    }
+                  }
+                }
+
+                Widget bubble;
                 if (isFailed) {
-                  return Padding(
+                  bubble = Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Align(
                       alignment: Alignment.centerRight,
@@ -1135,10 +1221,8 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
                       ),
                     ),
                   );
-                }
-
-                if (msg.isDeleted) {
-                  return Padding(
+                } else if (msg.isDeleted) {
+                  bubble = Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Align(
                       alignment: isTeacher ? Alignment.centerRight : Alignment.centerLeft,
@@ -1173,10 +1257,9 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
                       ),
                     ),
                   );
-                }
-
-                // Normal messages
-                return Padding(
+                } else {
+                  // Normal messages
+                  bubble = Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Align(
                     alignment: isTeacher ? Alignment.centerRight : Alignment.centerLeft,
@@ -1287,6 +1370,18 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
                     ),
                   ),
                 );
+                }
+
+                if (showDateSeparator && currDate != null) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDateSeparator(currDate),
+                      bubble,
+                    ],
+                  );
+                }
+                return bubble;
               },
             ),
           ),

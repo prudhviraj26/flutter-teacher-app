@@ -10,6 +10,7 @@ import '../models/models.dart';
 import '../constants/translations.dart';
 import '../services/auth_service.dart';
 import '../services/teacher_data_service.dart';
+import '../services/attachment_local_store.dart';
 
 enum AuthBootstrapResult {
   authenticated,
@@ -555,6 +556,7 @@ class AppState extends ChangeNotifier {
       }
 
       await _loadClassUpdates();
+      AttachmentLocalStore.autoCleanupPriorAcademicYear(DateTime(2026, 6, 1));
       initTempAttendance();
 
       // Fetch teacher's monthly attendance for the current month
@@ -948,6 +950,7 @@ class AppState extends ChangeNotifier {
         time: a.time,
         fullDate: a.fullDate,
         category: 'Meeting',
+        attachments: a.attachmentObjects,
       )).toList();
 
       // 2. School Notices: Strictly official school-wide broadcasts (school)
@@ -960,6 +963,7 @@ class AppState extends ChangeNotifier {
         date: a.date,
         time: a.time,
         fullDate: a.fullDate,
+        attachments: a.attachmentObjects,
       )).toList();
 
       // 3. Class Announcements:
@@ -1617,14 +1621,14 @@ class AppState extends ChangeNotifier {
   void addParentMessage(String parentId, String text, String sender) {
     final idx = _parentConversations.indexWhere((c) => c.parentId == parentId || c.threadId == parentId);
     final now = DateTime.now();
-    final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+    final timeIso = now.toIso8601String();
     
     final tempId = "temp_${now.millisecondsSinceEpoch}";
     final newMessage = ParentMessage(
       id: tempId,
       text: text,
       sender: sender,
-      timestamp: timeStr,
+      timestamp: timeIso,
       status: 'sending',
     );
 
@@ -1679,7 +1683,7 @@ class AppState extends ChangeNotifier {
       if (msgs.isNotEmpty) {
         _parentConversations[idx].lastMessage = msgs.last.text;
         try {
-          _parentConversations[idx].lastMessageAt = DateTime.parse(msgs.last.timestamp);
+          _parentConversations[idx].lastMessageAt = DateTime.parse(msgs.last.timestamp).toLocal();
         } catch (_) {}
       }
       notifyListeners();
@@ -1735,7 +1739,7 @@ class AppState extends ChangeNotifier {
           }
           _parentConversations[idx].lastMessage = parsed.text;
           try {
-            _parentConversations[idx].lastMessageAt = DateTime.parse(parsed.timestamp);
+            _parentConversations[idx].lastMessageAt = DateTime.parse(parsed.timestamp).toLocal();
           } catch (_) {}
         }
         // Since the teacher is actively watching this chat, automatically mark new incoming messages as read

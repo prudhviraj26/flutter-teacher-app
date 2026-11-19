@@ -7,6 +7,7 @@ import '../models/models.dart';
 import '../services/attachment_helper.dart';
 import '../services/mobile_compressor.dart';
 import '../services/teacher_data_service.dart';
+import '../services/attachment_local_store.dart';
 import '../widgets/upload_progress_dialog.dart';
 
 class ClassUpdateScreen extends StatefulWidget {
@@ -18,6 +19,7 @@ class ClassUpdateScreen extends StatefulWidget {
 
 class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   bool _showPostForm = false;
+  bool _isPosting = false;
   String _type = 'Classwork'; // 'Classwork' | 'Homework'
   String _classSection = '';
   String _subject = '';
@@ -174,160 +176,155 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   }
 
   Future<void> _handlePost(AppState appState) async {
-    final description = _descriptionController.text;
+    if (_isPosting) return;
+    setState(() => _isPosting = true);
 
-    if (_classSection.isEmpty) {
-      _showSnackBar('Please select Class & Section', AppColors.destructive);
-      return;
-    }
-    if (_subject.isEmpty) {
-      _showSnackBar('Please select Subject', AppColors.destructive);
-      return;
-    }
-    if (description.trim().isEmpty) {
-      _showSnackBar(appState.translate('pleaseEnterMessage'), AppColors.destructive);
-      return;
-    }
+    try {
+      final description = _descriptionController.text;
 
-    // Dynamic failure simulation trigger
-    if (description.toLowerCase().contains('fail') ||
-        description.toLowerCase().contains('error')) {
-      setState(() {
-        _failedToPost = true;
-      });
-      _showSnackBar('Transmission failed. Update saved to drafts.', AppColors.destructive);
-      return;
-    }
+      if (_classSection.isEmpty) {
+        _showSnackBar('Please select Class & Section', AppColors.destructive);
+        return;
+      }
+      if (_subject.isEmpty) {
+        _showSnackBar('Please select Subject', AppColors.destructive);
+        return;
+      }
+      if (description.trim().isEmpty) {
+        _showSnackBar(appState.translate('pleaseEnterMessage'), AppColors.destructive);
+        return;
+      }
 
-    final List<Map<String, dynamic>> uploadedAttachmentMeta = [];
-    final List<String> attachmentNames = [];
+      // Dynamic failure simulation trigger
+      if (description.toLowerCase().contains('fail') ||
+          description.toLowerCase().contains('error')) {
+        setState(() {
+          _failedToPost = true;
+        });
+        _showSnackBar('Transmission failed. Update saved to drafts.', AppColors.destructive);
+        return;
+      }
 
-    // Compress & upload attachments with dynamic progress dialog
-    if (_selectedAttachments.isNotEmpty) {
-      final totalFiles = _selectedAttachments.length;
-      final fileIndexNotifier = ValueNotifier<int>(1);
-      final progressNotifier = ValueNotifier<double>(0.0);
+      final List<Map<String, dynamic>> uploadedAttachmentMeta = [];
+      final List<String> attachmentNames = [];
 
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          return AnimatedBuilder(
-            animation: Listenable.merge([fileIndexNotifier, progressNotifier]),
-            builder: (ctx, _) {
-              return UploadProgressDialog(
-                fileIndex: fileIndexNotifier.value,
-                totalFiles: totalFiles,
-                progress: progressNotifier.value,
-              );
-            },
-          );
-        },
-      );
+      // Compress & upload attachments with simple file count progress dialog
+      if (_selectedAttachments.isNotEmpty) {
+        final totalFiles = _selectedAttachments.length;
+        final fileIndexNotifier = ValueNotifier<int>(1);
+        final progressNotifier = ValueNotifier<double>(0.0);
 
-      try {
-        for (int i = 0; i < totalFiles; i++) {
-          final att = _selectedAttachments[i];
-          fileIndexNotifier.value = i + 1;
-          attachmentNames.add(att.name);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) {
+            return AnimatedBuilder(
+              animation: Listenable.merge([fileIndexNotifier, progressNotifier]),
+              builder: (ctx, _) {
+                return UploadProgressDialog(
+                  fileIndex: fileIndexNotifier.value,
+                  totalFiles: totalFiles,
+                  progress: progressNotifier.value,
+                );
+              },
+            );
+          },
+        );
 
-          // 1. Client-side compression (0% - 40% of this file)
-          final file = File(att.path);
-          final compResult = await MobileCompressor.compressAttachment(
-            file,
-            onProgress: (p) {
-              final overall = (i + (p * 0.4)) / totalFiles;
-              progressNotifier.value = overall;
-            },
-          );
+        try {
+          for (int i = 0; i < totalFiles; i++) {
+            final att = _selectedAttachments[i];
+            fileIndexNotifier.value = i + 1;
+            progressNotifier.value = i / totalFiles;
+            attachmentNames.add(att.name);
 
-          // 2. Upload compressed file (40% - 100% of this file)
-          final uploadRes = await TeacherDataService.uploadAttachment(
-            compResult.file,
-            onProgress: (sent, total) {
-              if (total > 0) {
-                final fileP = sent / total;
-                final overall = (i + 0.4 + (fileP * 0.6)) / totalFiles;
-                progressNotifier.value = overall;
-              }
-            },
-          );
+            // 1. Client-side compression runs smoothly in background
+            final file = File(att.path);
+            final compResult = await MobileCompressor.compressAttachment(file);
 
-          // 3. Upload thumbnail if generated (images/videos)
-          String? thumbBlobPath;
-          String? thumbUrl;
-          if (compResult.thumbnailFile != null) {
-            try {
-              final thumbRes = await TeacherDataService.uploadAttachment(compResult.thumbnailFile!);
-              if (thumbRes != null) {
-                thumbBlobPath = thumbRes['blobPath']?.toString();
-                thumbUrl = thumbRes['readUrl']?.toString();
-              }
-            } catch (_) {}
+            // 2. Upload compressed file
+            final uploadRes = await TeacherDataService.uploadAttachment(compResult.file);
+
+            // 3. Upload thumbnail if generated (images/videos)
+            String? thumbBlobPath;
+            String? thumbUrl;
+            if (compResult.thumbnailFile != null) {
+              try {
+                final thumbRes = await TeacherDataService.uploadAttachment(compResult.thumbnailFile!);
+                if (thumbRes != null) {
+                  thumbBlobPath = thumbRes['blobPath']?.toString();
+                  thumbUrl = thumbRes['readUrl']?.toString();
+                }
+              } catch (_) {}
+            }
+
+            if (uploadRes != null) {
+              uploadedAttachmentMeta.add({
+                'name': att.name,
+                'blobPath': uploadRes['blobPath'],
+                'sizeBytes': compResult.compressedSizeBytes,
+                'contentType': uploadRes['contentType'] ?? 'application/octet-stream',
+                'type': compResult.type,
+                if (thumbBlobPath != null) 'thumbnailBlobPath': thumbBlobPath,
+                if (thumbUrl != null) 'thumbnailUrl': thumbUrl,
+              });
+            }
+            progressNotifier.value = (i + 1) / totalFiles;
           }
-
-          if (uploadRes != null) {
-            uploadedAttachmentMeta.add({
-              'name': att.name,
-              'blobPath': uploadRes['blobPath'],
-              'sizeBytes': compResult.compressedSizeBytes,
-              'contentType': uploadRes['contentType'] ?? 'application/octet-stream',
-              'type': compResult.type,
-              if (thumbBlobPath != null) 'thumbnailBlobPath': thumbBlobPath,
-              if (thumbUrl != null) 'thumbnailUrl': thumbUrl,
-            });
+        } catch (e) {
+          debugPrint('Error uploading attachments: $e');
+        } finally {
+          if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
+            Navigator.of(context, rootNavigator: true).pop();
           }
-          progressNotifier.value = (i + 1) / totalFiles;
-        }
-      } catch (e) {
-        debugPrint('Error uploading attachments: $e');
-      } finally {
-        if (mounted && Navigator.of(context, rootNavigator: true).canPop()) {
-          Navigator.of(context, rootNavigator: true).pop();
         }
       }
-    }
 
-    final now = DateTime.now();
-    final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-    final dueDateTime = now.add(const Duration(days: 2));
-    final dueDateStr = "${dueDateTime.year}-${dueDateTime.month.toString().padLeft(2, '0')}-${dueDateTime.day.toString().padLeft(2, '0')}";
+      final now = DateTime.now();
+      final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+      final dueDateTime = now.add(const Duration(days: 2));
+      final dueDateStr = "${dueDateTime.year}-${dueDateTime.month.toString().padLeft(2, '0')}-${dueDateTime.day.toString().padLeft(2, '0')}";
 
-    final formattedClassTarget = (_classSection.startsWith('Class ') || _classSection.startsWith('Grade '))
-        ? _classSection
-        : 'Class $_classSection';
+      final formattedClassTarget = (_classSection.startsWith('Class ') || _classSection.startsWith('Grade '))
+          ? _classSection
+          : 'Class $_classSection';
 
-    final newUpdate = ClassUpdate(
-      id: "CU${now.millisecondsSinceEpoch}",
-      type: _type,
-      title: _type == 'Homework' ? '$_subject Homework' : '$_subject Classwork',
-      description: description,
-      subject: _subject,
-      classTarget: formattedClassTarget,
-      teacherId: appState.teacher?.id ?? "T001",
-      teacherName: appState.teacher?.name ?? "Teacher",
-      dueDate: _type == 'Homework' ? dueDateStr : null,
-      attachments: attachmentNames.isNotEmpty ? attachmentNames : null,
-      date: dateStr,
-    );
+      final newUpdate = ClassUpdate(
+        id: "CU${now.millisecondsSinceEpoch}",
+        type: _type,
+        title: _type == 'Homework' ? '$_subject Homework' : '$_subject Classwork',
+        description: description,
+        subject: _subject,
+        classTarget: formattedClassTarget,
+        teacherId: appState.teacher?.id ?? "T001",
+        teacherName: appState.teacher?.name ?? "Teacher",
+        dueDate: _type == 'Homework' ? dueDateStr : null,
+        attachments: attachmentNames.isNotEmpty ? attachmentNames : null,
+        date: dateStr,
+      );
 
-    await appState.addClassUpdate(
-      newUpdate,
-      rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
-    );
+      await appState.addClassUpdate(
+        newUpdate,
+        rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
+      );
 
-    if (mounted) {
-      _showSnackBar(appState.translate('updatePosted'), AppColors.success);
+      if (mounted) {
+        _showSnackBar(appState.translate('updatePosted'), AppColors.success);
 
-      // Clear
-      _descriptionController.clear();
-      setState(() {
-        _classSection = '';
-        _subject = '';
-        _selectedAttachments.clear();
-        _showPostForm = false;
-        _failedToPost = false;
-      });
+        // Clear
+        _descriptionController.clear();
+        setState(() {
+          _classSection = '';
+          _subject = '';
+          _selectedAttachments.clear();
+          _showPostForm = false;
+          _failedToPost = false;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPosting = false);
+      }
     }
   }
 
@@ -937,13 +934,19 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                           children: [
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: () => _handlePost(appState),
+                                onPressed: _isPosting ? null : () => _handlePost(appState),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   padding: const EdgeInsets.symmetric(vertical: 14),
                                 ),
-                                child: Text(appState.translate('postUpdate'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                child: _isPosting
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                      )
+                                    : Text(appState.translate('postUpdate'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1459,7 +1462,7 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                     ],
                     
                     // Attachments
-                    if (update.attachments != null && update.attachments!.isNotEmpty) ...[
+                    if ((update.attachmentObjects.isNotEmpty) || (update.attachments != null && update.attachments!.isNotEmpty)) ...[
                       const SizedBox(height: 24),
                       const Text(
                         'Attachments',
@@ -1471,42 +1474,87 @@ class ClassUpdateDetailScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Column(
-                        children: update.attachments!.map((attachment) {
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF5F7FA),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: ListTile(
-                              leading: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: AttachmentHelper.getFileColor(attachment).withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  AttachmentHelper.getFileIcon(attachment),
-                                  color: AttachmentHelper.getFileColor(attachment),
-                                ),
+                        children: List.generate(
+                          update.attachmentObjects.isNotEmpty
+                              ? update.attachmentObjects.length
+                              : (update.attachments?.length ?? 0),
+                          (index) {
+                            final NoticeAttachment att = update.attachmentObjects.isNotEmpty
+                                ? update.attachmentObjects[index]
+                                : NoticeAttachment.fromJson(update.attachments![index]);
+                            final fileName = att.name;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF9FAFB),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE5E7EB)),
                               ),
-                              title: Text(
-                                attachment,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1F2937),
+                              child: ListTile(
+                                leading: Container(
+                                  width: 40,
+                                  height: 40,
+                                  decoration: BoxDecoration(
+                                    color: AttachmentHelper.getFileColor(fileName).withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    AttachmentHelper.getFileIcon(fileName),
+                                    color: AttachmentHelper.getFileColor(fileName),
+                                  ),
                                 ),
+                                title: Text(
+                                  fileName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: att.formattedSize.isNotEmpty
+                                    ? Text(att.formattedSize, style: const TextStyle(fontSize: 11, color: Colors.grey))
+                                    : null,
+                                trailing: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.remove_red_eye_outlined, size: 14, color: AppColors.primary),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'View',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                onTap: () async {
+                                  final key = att.blobPath?.isNotEmpty == true
+                                      ? att.blobPath!
+                                      : (att.url.isNotEmpty ? att.url : att.name);
+                                  await AttachmentLocalStore.openAttachment(
+                                    context: context,
+                                    key: key,
+                                    url: att.url,
+                                    dateStr: update.date,
+                                    originalFileName: att.name,
+                                  );
+                                },
                               ),
-                              onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Downloading $attachment...')),
-                                );
-                              },
-                            ),
-                          );
-                        }).toList(),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],

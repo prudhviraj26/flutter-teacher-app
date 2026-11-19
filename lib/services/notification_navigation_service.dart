@@ -125,12 +125,16 @@ class NotificationNavigationService {
     }
   }
 
+  static bool _initialNotificationHandled = false;
+
   /// Check if the app was launched by tapping a push notification from terminated state
   static Future<void> checkInitialNotification() async {
+    if (_initialNotificationHandled) return;
     try {
       final initialMessage =
           await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
+        _initialNotificationHandled = true;
         debugPrint('[Teacher FCM Terminated] App launched from notification');
         Future.delayed(const Duration(milliseconds: 600), () {
           handleNotificationPayload(initialMessage.data);

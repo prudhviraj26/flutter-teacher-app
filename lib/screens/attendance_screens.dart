@@ -1179,7 +1179,7 @@ class AttendanceSubmittedScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
+                  onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1551,7 +1551,7 @@ class AttendanceCorrectionScreen extends StatelessWidget {
                                 backgroundColor: AppColors.success,
                               ),
                             );
-                            Navigator.pushReplacementNamed(context, '/home');
+                            Navigator.of(context).popUntil((route) => route.isFirst);
                           } else {
                             final err = appState.lastAttendanceError ?? 'Failed to update attendance';
                             ScaffoldMessenger.of(context).showSnackBar(

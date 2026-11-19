@@ -190,21 +190,6 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      const Divider(color: Color(0xFFF3F4F6)),
-                      const SizedBox(height: 12),
-                      
-                      _buildInfoRow('School', appState.currentSchoolName),
-                      _buildInfoRow(appState.translate('employeeId'), teacher.employeeId),
-                      _buildInfoRow(appState.translate('mobile'), teacher.mobile),
-                      _buildInfoRow(appState.translate('email'), teacher.email),
-                      if (teacher.assignedClass != null)
-                        _buildInfoRow(appState.translate('assignedClass'), teacher.assignedClass!),
-                      if (teacher.assignedClasses != null &&
-                          teacher.assignedClasses!.isNotEmpty &&
-                          (teacher.assignedClass == null || !teacher.assignedClasses!.contains(teacher.assignedClass)))
-                        _buildInfoRow(appState.translate('assignedClasses'), teacher.assignedClasses!.join(', ')),
-                      _buildInfoRow(appState.translate('subjects'), teacher.subjects.join(', ')),
                     ],
                   ),
                 ),
@@ -301,33 +286,6 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: const CustomBottomNavBar(currentRoute: '/profile'),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$label:',
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF374151),
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

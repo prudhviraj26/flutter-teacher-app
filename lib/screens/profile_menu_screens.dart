@@ -42,68 +42,15 @@ Widget _buildAppBar(BuildContext context, String title, Color color) {
 }
 
 // 1. TEACHER PROFILE DETAIL SCREEN
-class TeacherProfileDetailScreen extends StatefulWidget {
+class TeacherProfileDetailScreen extends StatelessWidget {
   const TeacherProfileDetailScreen({super.key});
-
-  @override
-  State<TeacherProfileDetailScreen> createState() => _TeacherProfileDetailScreenState();
-}
-
-class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  late TextEditingController _mobileController;
-  late String _designation;
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final appState = Provider.of<AppState>(context, listen: false);
-    final teacher = appState.teacher;
-    _nameController = TextEditingController(text: teacher?.name ?? '');
-    _emailController = TextEditingController(text: teacher?.email ?? '');
-    _mobileController = TextEditingController(text: teacher?.mobile ?? '');
-    _designation = teacher?.designation ?? 'Class Teacher';
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _mobileController.dispose();
-    super.dispose();
-  }
-
-  void _saveProfile() {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isSaving = true;
-      });
-      Future.delayed(const Duration(milliseconds: 1000), () {
-        if (mounted) {
-          setState(() {
-            _isSaving = false;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text('Profile details updated successfully (Demo Mode)'),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-          Navigator.pop(context);
-        }
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
+    final designationText = teacher?.designation ??
+        (teacher?.assignedClass != null ? 'Class Teacher' : 'Subject Teacher');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -113,190 +60,130 @@ class _TeacherProfileDetailScreenState extends State<TeacherProfileDetailScreen>
           Expanded(
             child: SafeArea(
               top: false,
-              child: SingleChildScrollView(
+              child: ListView(
                 padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Picture Avatar Card
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
-                      ),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 48,
-                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                                child: Text(
-                                  teacher?.name.isNotEmpty == true ? teacher!.name[0] : 'T',
-                                  style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: AppColors.primary),
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: CircleAvatar(
-                                  radius: 16,
-                                  backgroundColor: AppColors.secondary,
-                                  child: IconButton(
-                                    icon: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Profile photo is managed by school administration.')),
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            teacher?.employeeId ?? '',
-                            style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500, fontSize: 13),
-                          ),
-                        ],
-                      ),
+                children: [
+                  // Picture Avatar Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
                     ),
-                    const SizedBox(height: 24),
-
-                    // Inputs Card
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
-                      ),
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Full Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _nameController,
-                            validator: (val) => val?.isEmpty == true ? 'Please enter name' : null,
-                            decoration: InputDecoration(
-                              hintText: 'Enter Full Name',
-                              fillColor: const Color(0xFFF5F7FA),
-                              filled: true,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                            ),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        CircleAvatar(
+                          radius: 44,
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                          child: Text(
+                            teacher?.name.isNotEmpty == true ? teacher!.name[0] : 'T',
+                            style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: AppColors.primary),
                           ),
-                          const SizedBox(height: 16),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          teacher?.name ?? 'Teacher',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1F2937)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '$designationText • ${teacher?.employeeId ?? ""}',
+                          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
 
-                          const Text('Designation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                          const SizedBox(height: 6),
-                          Container(
-                            decoration: BoxDecoration(color: const Color(0xFFF5F7FA), borderRadius: BorderRadius.circular(14)),
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _designation,
-                                isExpanded: true,
-                                items: const [
-                                  DropdownMenuItem(value: 'Class Teacher', child: Text('Class Teacher')),
-                                  DropdownMenuItem(value: 'Subject Teacher', child: Text('Subject Teacher')),
-                                ],
-                                onChanged: (val) => setState(() => _designation = val ?? 'Class Teacher'),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text('Email Address', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            validator: (val) => val?.contains('@') == false ? 'Please enter valid email' : null,
-                            decoration: InputDecoration(
-                              hintText: 'Enter Email',
-                              fillColor: const Color(0xFFF5F7FA),
-                              filled: true,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          const Text('Mobile Number', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                          const SizedBox(height: 6),
-                          TextFormField(
-                            controller: _mobileController,
-                            keyboardType: TextInputType.phone,
-                            validator: (val) => val?.isEmpty == true ? 'Please enter phone' : null,
-                            decoration: InputDecoration(
-                              hintText: 'Enter Mobile Phone',
-                              fillColor: const Color(0xFFF5F7FA),
-                              filled: true,
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                            ),
-                          ),
-                          if (teacher != null && teacher.subjects.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            const Text('Assigned Subjects', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                            const SizedBox(height: 6),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF5F7FA),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                teacher.subjects.join(', '),
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1F2937)),
-                              ),
+                  // Read-Only Profile Details Card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
+                    ),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.badge_outlined, color: AppColors.primary, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Profile Information',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1F2937)),
                             ),
                           ],
-                          if (teacher != null && (teacher.assignedClass != null || (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty))) ...[
-                            const SizedBox(height: 16),
-                            const Text('Assigned Class / Sections', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                            const SizedBox(height: 6),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF5F7FA),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Text(
-                                teacher.assignedClass ?? teacher.assignedClasses!.join(', '),
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1F2937)),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildReadOnlyRow('School', appState.currentSchoolName),
+                        _buildReadOnlyRow(appState.translate('employeeId'), teacher?.employeeId ?? 'N/A'),
+                        _buildReadOnlyRow('Full Name', teacher?.name ?? 'N/A'),
+                        _buildReadOnlyRow('Designation', designationText),
+                        _buildReadOnlyRow(appState.translate('email'), teacher?.email ?? 'N/A'),
+                        _buildReadOnlyRow(appState.translate('mobile'), teacher?.mobile ?? 'N/A'),
+                        if (teacher?.assignedClass != null)
+                          _buildReadOnlyRow(appState.translate('assignedClass'), teacher!.assignedClass!),
+                        if (teacher?.assignedClasses != null &&
+                            teacher!.assignedClasses!.isNotEmpty &&
+                            (teacher.assignedClass == null || !teacher.assignedClasses!.contains(teacher.assignedClass)))
+                          _buildReadOnlyRow(appState.translate('assignedClasses'), teacher.assignedClasses!.join(', ')),
+                        _buildReadOnlyRow(
+                          appState.translate('subjects'),
+                          teacher?.subjects.isNotEmpty == true ? teacher!.subjects.join(', ') : 'N/A',
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 32),
+                  ),
+                  const SizedBox(height: 16),
 
-                    // Actions
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveProfile,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 2,
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  // Administrative Verification Note
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE0F2F1),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFB2DFDB)),
                     ),
-                  ],
-                ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.info_outline, color: AppColors.primary, size: 18),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Teacher profile details are verified and managed by school administration.',
+                            style: TextStyle(fontSize: 12, color: Color(0xFF004D40), height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF374151), fontSize: 13),
             ),
           ),
         ],

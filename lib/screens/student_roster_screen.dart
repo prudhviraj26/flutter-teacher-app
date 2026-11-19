@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
@@ -757,8 +758,8 @@ class StudentProfileScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        s.address.isNotEmpty ? s.address : 'Not Provided',
-                        style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                        s.address.isNotEmpty ? s.address : 'Address not provided',
+                        style: const TextStyle(fontSize: 13, color: Color(0xFF374151), height: 1.5, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -769,6 +770,19 @@ class StudentProfileScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final clean = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (clean.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: clean);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('Error launching dialer: $e');
+    }
   }
 
   Widget _buildParentSectionCard(BuildContext context, Student s) {
@@ -800,26 +814,55 @@ class StudentProfileScreen extends StatelessWidget {
               if (s.parentMobile.isNotEmpty)
                 IconButton(
                   icon: const Icon(Icons.call, color: AppColors.secondary, size: 20),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Calling parent: ${s.parentMobile}'),
-                        backgroundColor: AppColors.secondary,
-                      ),
-                    );
-                  },
+                  tooltip: 'Call Parent',
+                  onPressed: () => _makePhoneCall(s.parentMobile),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           _buildInfoRow('Parent Name', s.parentName),
           const SizedBox(height: 8),
-          _buildInfoRow('Primary Mobile', s.parentMobile),
+          _buildPhoneRow('Primary Mobile', s.parentMobile),
           if (s.emergencyContact.isNotEmpty && s.emergencyContact != s.parentMobile) ...[
             const SizedBox(height: 8),
-            _buildInfoRow('Emergency Contact', s.emergencyContact),
+            _buildPhoneRow('Emergency Contact', s.emergencyContact),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildPhoneRow(String label, String value) {
+    final clean = value.replaceAll(RegExp(r'[^\d+]'), '');
+    return InkWell(
+      onTap: clean.isNotEmpty ? () => _makePhoneCall(value) : null,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (clean.isNotEmpty) ...[
+                  const Icon(Icons.call_outlined, color: AppColors.secondary, size: 14),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  value.isNotEmpty ? value : 'N/A',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: clean.isNotEmpty ? AppColors.secondary : const Color(0xFF374151),
+                    fontSize: 13,
+                    decoration: clean.isNotEmpty ? TextDecoration.underline : null,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
