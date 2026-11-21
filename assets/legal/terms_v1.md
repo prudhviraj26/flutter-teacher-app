@@ -1,53 +1,204 @@
-# Terms and Conditions of Use
+# VEYHO TECHNOLOGIES TERMS OF USE (END USER AGREEMENT)
 
-**Effective Date:** October 30, 2026  
-**Version:** 1.0.0
+**Effective Date: Jul 10, 2026**
 
-Welcome to Veyho, the unified school management and parent communication platform. By accessing or using the Veyho Parent Mobile Application and related services, you ("Parent", "Guardian", or "User") agree to be bound by these Terms and Conditions ("Terms"). If you do not agree to these Terms, you may not access or use the application.
+These Terms of Use ("Terms") constitute a legally binding agreement between Veyho Technologies LLP, a company incorporated under the Companies Act, 2013, having its registered office at Cavansite Society, Mumbai Bangalore Highway, Warje, Pune 411058, Maharashtra, India ("Veyho", "Company", "we", "our" or "us"), and every person who accesses or uses the Veyho School ERP web application, mobile application, website, or any related services (collectively, the "Platform").
 
----
+By selecting the "I Agree" option, creating an account, accessing or using the Platform, you acknowledge that you have read, understood and agree to be bound by these Terms and the Privacy Policy. If you do not agree with these Terms, you must not access or use the Platform.
 
-### 1. Account Access & Security
-1. **Credentials:** You are responsible for maintaining the confidentiality of your mobile login credentials and passwords. You agree not to disclose your login details to any unauthorized third party.
-2. **Authorized Family Contacts:** School records designate specific parent/guardian contact numbers. Any actions taken through an account authenticated with your verified mobile number are presumed to be authorized by you.
-3. **Prompt Notification:** You must immediately notify the school administration if you suspect unauthorized access to your account or device.
+## 1. Definitions
 
----
+For the purpose of these Terms:
 
-### 2. Student Information & Academic Records
-1. **Scope of Service:** The application provides real-time access to attendance records, homework assignments, class notices, event schedules, timetable updates, and academic progress for your enrolled student(s).
-2. **Accuracy of Data:** While Veyho and your educational institution strive for real-time accuracy, official school office circulars and attested physical report cards remain the primary academic record.
-3. **Discrepancy Reporting:** In the event of attendance or grading discrepancies, parents are encouraged to contact the class teacher or school administration through the application's direct chat module.
+- **"Platform"** means the Veyho School ERP software, website, mobile application and all related services.
+- **"School"** means the educational institution subscribing to the Platform.
+- **"User"** includes students, parents, teachers, school staff, administrators and any authorised person accessing the Platform.
+- **"Content"** means all information, data, text, images, documents, notices, attendance records, academic records and other materials available through the Platform.
 
----
+## 2. Eligibility
 
-### 3. School Communication & Code of Conduct
-1. **Teacher-Parent Communication:** The chat feature facilitates respectful academic and behavioral discussions directly between authorized teachers and parents.
-2. **Prohibited Conduct:** Users may not:
-   - Use abusive, harassing, defamatory, or inappropriate language toward school staff or other parents.
-   - Transmit unsolicited commercial messages, chain letters, or spam.
-   - Upload malicious software, virus-laden files, or unauthorized multimedia.
-3. **Monitoring & Moderation:** The school administration reserves the right to review chat threads for compliance with school behavioral policies and local regulatory standards.
+- Users must be authorised by the respective School.
+- Student users below the age prescribed under applicable law shall access the Platform under the supervision or authority of their parent, guardian or School.
+- The School represents that it has obtained all permissions necessary for providing access to student users.
 
----
+## 3. Acceptance of Terms
 
-### 4. Fee Payments & Financial Transactions
-1. **Digital Receipts:** Fee installments paid through authorized school banking channels or integrated payment gateways generate instantaneous digital receipts within the application.
-2. **Refund Policies:** All tuition fee refunds, transport fee adjustments, or concession claims are subject to the specific refund regulations of your enrolled school institution. Veyho does not establish tuition refund schedules.
+By using the Platform, the User agrees to comply with:
 
----
+- these Terms;
+- the Privacy Policy;
+- applicable laws; and
+- all policies issued by the School.
 
-### 5. Multi-Device Usage & Push Notifications
-1. **Device Telemetry:** To secure multi-device sessions and route critical school safety broadcasts, the application securely registers device hardware identifiers (UUID), operating system levels, and push delivery tokens.
-2. **Critical Alerts:** Disabling push notifications may prevent timely receipt of urgent emergency alerts, bus transit updates, or immediate unscheduled closure announcements.
+## 4. Nature of Services
 
----
+The Platform provides technology services including, without limitation:
 
-### 6. Modifications to Terms
-1. **Semantic Versioning:** Material modifications to these Terms will be published with a major version increment (e.g., v2.0.0) and will require explicit re-acceptance before continued use. Non-material modifications (typo corrections, contact address updates) will update the document version without requiring re-assent.
-2. **Continued Use:** Your continued access following formal notification constitutes acceptance of updated terms.
+- student information management;
+- attendance management;
+- examination management;
+- fee management;
+- communication with parents;
+- timetable management;
+- homework and assignments;
+- document management;
+- transport management;
+- library management;
+- employee management; and
+- other ERP modules made available by Veyho.
 
----
+Veyho acts solely as a technology service provider as a intermediary between school, students and parents.
 
-### 7. Governing Law & Dispute Resolution
-These Terms are governed by and construed in accordance with the laws of the Republic of India. Any disputes arising out of or related to these Terms shall be subject to the exclusive jurisdiction of the competent courts having jurisdiction over the school's registered administrative district.
+## 5. User Accounts
+
+The User shall:
+
+- provide accurate information;
+- maintain confidentiality of login credentials;
+- immediately notify the School regarding unauthorised access;
+- not permit any third person to use their account.
+
+The User shall remain responsible for all activities undertaken through their account.
+
+## 6. Student and Parent Accounts
+
+Student and parent access shall be controlled by the School.
+
+Parents shall only access information relating to their authorised child unless otherwise permitted by the School.
+
+## 7. School Administrator Responsibilities
+
+The School shall be responsible for:
+
+- creation of user accounts;
+- correctness of uploaded information;
+- obtaining all required parental permissions;
+- management of access rights;
+- ensuring compliance with applicable laws.
+
+## 8. Acceptable Use
+
+Users shall use the Platform only for lawful educational purposes.
+
+Users shall not:
+
+- hack or interfere with the Platform;
+- upload viruses or malicious software;
+- reverse engineer any software;
+- copy or reproduce source code;
+- misuse student information;
+- impersonate another person;
+- upload unlawful or defamatory material;
+- violate intellectual property rights;
+- share passwords;
+- attempt unauthorised access.
+
+## 9. School Data
+
+All academic, administrative and student-related information uploaded by the School remains the property of the School.
+
+Veyho shall process such information solely for providing the subscribed services.
+
+## 10. Intellectual Property
+
+The Platform, software, trademarks, logos, designs, source code, databases and documentation are the exclusive intellectual property of Veyho or its licensors.
+
+Nothing contained herein transfers ownership of any intellectual property rights to any User or School.
+
+## 11. Communications
+
+The Platform may facilitate notifications through SMS, email, WhatsApp, push notifications or other electronic means. Delivery depends upon third-party service providers. Veyho does not guarantee successful delivery of every communication.
+
+## 12. Third-Party Services
+
+The Platform may integrate with payment gateways, cloud services, SMS providers or other third-party services. Such services remain governed by their respective terms. Veyho shall not be responsible for third-party acts or omissions.
+
+## 13. Availability
+
+While Veyho shall use commercially reasonable efforts to maintain availability of the Platform, uninterrupted or error-free access is not guaranteed. Scheduled maintenance may temporarily affect availability.
+
+## 14. User Content
+
+Users remain responsible for all information uploaded through their accounts.
+
+Users warrant that such information:
+
+- is accurate;
+- does not violate law;
+- does not infringe third-party rights.
+
+## 15. Data Accuracy
+
+Academic records, attendance, examination results and fee information displayed on the Platform are generated from information entered by authorised School personnel. Veyho does not independently verify the accuracy of such information.
+
+## 16. Payments
+
+Where online fee payment facilities are provided, payment processing is undertaken by authorised payment gateway providers. Veyho acts only as a technology facilitator.
+
+## 17. Suspension
+
+Veyho or the School may suspend user access where:
+
+- these Terms are violated;
+- misuse is detected;
+- security risks arise;
+- legal compliance requires suspension.
+
+## 18. Termination
+
+Access may be terminated:
+
+- by the School;
+- by the User discontinuing use;
+- by Veyho for breach of these Terms;
+- upon expiry or termination of the School's subscription.
+
+## 19. Disclaimer
+
+The Platform is provided on an "as is" and "as available" basis.
+
+To the maximum extent permitted by law, Veyho disclaims all warranties including merchantability, fitness for a particular purpose and uninterrupted availability.
+
+## 20. Limitation of Liability
+
+To the maximum extent permitted under applicable law, Veyho shall not be liable for any indirect, incidental, consequential, special or punitive damages, including loss of profits, business interruption, goodwill, or data.
+
+Subject to applicable law, Veyho's aggregate liability arising out of or in connection with the Platform shall not exceed the subscription fees actually received by Veyho from the relevant School for the twelve (12) months immediately preceding the event giving rise to the claim.
+
+Nothing in these Terms excludes liability that cannot lawfully be excluded.
+
+## 21. Indemnity
+
+The User and the School agree to indemnify and hold harmless Veyho from claims arising out of:
+
+- misuse of the Platform;
+- violation of these Terms;
+- unlawful content uploaded;
+- infringement of third-party rights.
+
+## 22. Force Majeure
+
+Veyho shall not be liable for failure or delay caused by events beyond its reasonable control, including natural disasters, governmental actions, internet failures, cyberattacks, labour disputes or other force majeure events.
+
+## 23. Privacy
+
+Collection and processing of personal information shall be governed by the Privacy Policy in India.
+
+## 24. Modification
+
+Veyho may revise these Terms from time to time.
+
+Continued use of the Platform after revisions constitutes acceptance of the updated Terms.
+
+## 25. Governing Law and Jurisdiction
+
+These Terms shall be governed by the laws of India. Subject to any agreed arbitration provisions, the courts having jurisdiction over the registered office of Veyho shall have exclusive jurisdiction.
+
+## 26. Contact
+
+- **Company:** Veyho Technologies LLP
+- **Registered Office:** Cavansite Society, Mumbai Bangalore Highway, Warje, Pune 411058
+- **Email:** support@veyho.com
+- **Phone:** +91 - XXXXXXXXXX
+
+By selecting "I Agree", you acknowledge that you have read, understood and agree to these Terms of Use and the Privacy Policy.

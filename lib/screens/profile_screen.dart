@@ -156,8 +156,10 @@ class ProfileScreen extends StatelessWidget {
                             foregroundColor: Colors.white,
                             backgroundImage: appState.profilePic != null
                                 ? MemoryImage(const Base64Decoder().convert(appState.profilePic!))
-                                : null,
-                            child: appState.profilePic == null
+                                : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                                    ? NetworkImage(teacher.photoUrl!)
+                                    : null) as ImageProvider?,
+                            child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
                                 ? Text(
                                     teacher.name.isNotEmpty ? teacher.name[0] : 'T',
                                     style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),

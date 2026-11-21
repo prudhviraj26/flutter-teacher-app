@@ -123,13 +123,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ],
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: const Center(
-                        child: Icon(
-                          Icons.school,
-                          color: AppColors.primary,
-                          size: 24,
-                        ),
-                      ),
+                      child: appState.schoolLogoBase64 != null
+                          ? Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Image.memory(
+                                base64Decode(appState.schoolLogoBase64!),
+                                fit: BoxFit.contain,
+                              ),
+                            )
+                          : (appState.schoolLogoUrl != null && appState.schoolLogoUrl!.isNotEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Image.network(
+                                    appState.schoolLogoUrl!,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.school,
+                                      color: AppColors.primary,
+                                      size: 24,
+                                    ),
+                                  ),
+                                )
+                              : const Center(
+                                  child: Icon(
+                                    Icons.school,
+                                    color: AppColors.primary,
+                                    size: 24,
+                                  ),
+                                )),
                     ),
                     const SizedBox(width: 12),
                     
@@ -199,8 +220,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           foregroundColor: AppColors.primary,
                           backgroundImage: appState.profilePic != null
                               ? MemoryImage(base64Decode(appState.profilePic!))
-                              : null,
-                          child: appState.profilePic == null
+                              : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                                  ? NetworkImage(teacher.photoUrl!)
+                                  : null) as ImageProvider?,
+                          child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
                               ? Text(
                                   teacher.name.isNotEmpty ? teacher.name[0] : 'T',
                                   style: const TextStyle(

@@ -13,6 +13,8 @@ class Teacher {
   final List<String> subjects;
   final String joiningDate;
   final String? schoolName;
+  final String? photoUrl;
+  final String? schoolLogoUrl;
 
   Teacher({
     required this.id,
@@ -27,6 +29,8 @@ class Teacher {
     required this.subjects,
     required this.joiningDate,
     this.schoolName,
+    this.photoUrl,
+    this.schoolLogoUrl,
   });
 
   factory Teacher.fromJson(Map<String, dynamic> json) {
@@ -43,6 +47,8 @@ class Teacher {
       subjects: (json['subjects'] as List<dynamic>).map((e) => e as String).toList(),
       joiningDate: json['joiningDate'] as String,
       schoolName: json['schoolName'] as String?,
+      photoUrl: json['photoUrl'] as String?,
+      schoolLogoUrl: json['schoolLogoUrl'] as String?,
     );
   }
 
@@ -60,6 +66,8 @@ class Teacher {
       'subjects': subjects,
       'joiningDate': joiningDate,
       'schoolName': schoolName,
+      'photoUrl': photoUrl,
+      'schoolLogoUrl': schoolLogoUrl,
     };
   }
 

@@ -2,6 +2,7 @@ import '../services/api_service.dart';
 import '../services/notification_navigation_service.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 
 import 'package:flutter/material.dart';
@@ -157,6 +158,10 @@ class AppState extends ChangeNotifier {
   String? get lastLoginError => _lastLoginError;
   Teacher? get teacher => _teacher;
   String? get profilePic => _profilePic;
+  String? _schoolLogoUrl;
+  String? get schoolLogoUrl => _schoolLogoUrl;
+  String? _schoolLogoBase64;
+  String? get schoolLogoBase64 => _schoolLogoBase64;
   String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
   bool get isLoadingStudents => _isLoadingStudents;
   bool get isAttendanceSubmittedToday => _isAttendanceSubmittedToday;
@@ -332,6 +337,14 @@ class AppState extends ChangeNotifier {
       }
     }
     
+    // Load cached school logo and teacher avatar from flash storage (0 egress)
+    _schoolLogoUrl = _prefs?.getString('veyho_cached_school_logo_url');
+    _schoolLogoBase64 = _prefs?.getString('veyho_cached_school_logo');
+    if (_teacher != null) {
+      _profilePic = _prefs?.getString('teacher_avatar_${_teacher!.employeeId}') ??
+          _prefs?.getString('veyho_teacher_avatar_${_teacher!.id}');
+    }
+
     // Load cached notices, class updates, and parent conversations immediately on startup
     await _loadReadNoticeIds();
     await _loadCachedNotices();
@@ -343,6 +356,62 @@ class AppState extends ChangeNotifier {
     if (_loggedIn) {
       _registerDeviceToken();
       loadLiveData();
+    }
+  }
+
+  /// Download an image once and cache it as base64 in local device storage (0-egress)
+  Future<void> _cacheImageLocally(
+    String url,
+    String prefKey,
+    void Function(String base64Data) onCached,
+  ) async {
+    try {
+      final res = await http.get(Uri.parse(url));
+      if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+        final b64 = base64Encode(res.bodyBytes);
+        await _prefs?.setString(prefKey, b64);
+        onCached(b64);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error caching image locally ($prefKey): $e');
+    }
+  }
+
+  Future<void> _syncMediaAssets(
+    String? apiSchoolLogoUrl,
+    String? apiPhotoUrl,
+    String teacherId,
+    String employeeId,
+  ) async {
+    // School Logo 0-egress flash caching
+    if (apiSchoolLogoUrl != null && apiSchoolLogoUrl.isNotEmpty) {
+      _schoolLogoUrl = apiSchoolLogoUrl;
+      await _prefs?.setString('veyho_cached_school_logo_url', apiSchoolLogoUrl);
+      final cleanLogoPath = apiSchoolLogoUrl.split('?').first;
+      final cachedLogoPath = _prefs?.getString('veyho_cached_school_logo_path');
+      if (_schoolLogoBase64 == null || cachedLogoPath != cleanLogoPath) {
+        await _cacheImageLocally(apiSchoolLogoUrl, 'veyho_cached_school_logo', (b64) {
+          _schoolLogoBase64 = b64;
+        });
+        await _prefs?.setString('veyho_cached_school_logo_path', cleanLogoPath);
+      }
+    }
+
+    // Teacher Profile Picture 0-egress flash caching
+    if (apiPhotoUrl != null && apiPhotoUrl.isNotEmpty) {
+      final cleanPhotoPath = apiPhotoUrl.split('?').first;
+      final cachedPhotoPath = _prefs?.getString('veyho_teacher_avatar_path_$teacherId');
+      if (_profilePic == null || cachedPhotoPath != cleanPhotoPath) {
+        await _cacheImageLocally(apiPhotoUrl, 'teacher_avatar_$employeeId', (b64) {
+          _profilePic = b64;
+        });
+        if (_profilePic != null) {
+          await _prefs?.setString('teacher_avatar_$employeeId', _profilePic!);
+          await _prefs?.setString('veyho_teacher_avatar_$teacherId', _profilePic!);
+        }
+        await _prefs?.setString('veyho_teacher_avatar_path_$teacherId', cleanPhotoPath);
+      }
     }
   }
 
@@ -416,6 +485,8 @@ class AppState extends ChangeNotifier {
                 : 'Subject Teacher';
 
             final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
+            final String? apiPhotoUrl = userMap['photoUrl'] as String?;
+            final String? apiSchoolLogoUrl = userMap['schoolLogoUrl'] as String?;
 
             _teacher = Teacher(
               id: userMap['id'] ?? 'T001',
@@ -430,6 +501,16 @@ class AppState extends ChangeNotifier {
               subjects: parsedSubjects,
               joiningDate: joiningDate,
               schoolName: apiSchoolName,
+              photoUrl: apiPhotoUrl,
+              schoolLogoUrl: apiSchoolLogoUrl,
+            );
+
+            // Sync media assets with local cache for 0-egress fast rendering
+            await _syncMediaAssets(
+              apiSchoolLogoUrl,
+              apiPhotoUrl,
+              _teacher!.id,
+              _teacher!.employeeId,
             );
           }
         } catch (e) {
@@ -660,6 +741,8 @@ class AppState extends ChangeNotifier {
             : 'Subject Teacher';
 
         final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
+        final String? apiPhotoUrl = userMap['photoUrl'] as String?;
+        final String? apiSchoolLogoUrl = userMap['schoolLogoUrl'] as String?;
 
         final loadedTeacher = Teacher(
           id: userMap['id'] ?? 'T001',
@@ -674,6 +757,8 @@ class AppState extends ChangeNotifier {
           subjects: parsedSubjects,
           joiningDate: joiningDate,
           schoolName: apiSchoolName,
+          photoUrl: apiPhotoUrl,
+          schoolLogoUrl: apiSchoolLogoUrl,
         );
 
         _mustChangePassword = (response['mustChangePassword'] == true) || (userMap['mustChangePassword'] == true);
@@ -703,7 +788,9 @@ class AppState extends ChangeNotifier {
           'acceptedPrivacyVersion': _acceptedPrivacyVersion,
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
-        _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}');
+        _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}') ??
+            _prefs?.getString('veyho_teacher_avatar_${loadedTeacher.id}');
+        _syncMediaAssets(apiSchoolLogoUrl, apiPhotoUrl, loadedTeacher.id, loadedTeacher.employeeId);
         // Instant local cache loads
         await _loadReadNoticeIds();
         await _loadCachedNotices();
@@ -764,6 +851,8 @@ class AppState extends ChangeNotifier {
     _mustChangePassword = false;
     _teacher = null;
     _profilePic = null;
+    _schoolLogoUrl = null;
+    _schoolLogoBase64 = null;
     await _prefs?.remove('veyho_teacher_user');
     notifyListeners();
   }
