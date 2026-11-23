@@ -13,14 +13,48 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(appState.translate('logout')),
-          content: Text(appState.translate('areYouSure')),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.logout, color: Color(0xFF4B5563), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                appState.translate('logout'),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Text(
+            appState.translate('areYouSure'),
+            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           actions: [
-            TextButton(
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              ),
               onPressed: () => Navigator.pop(context),
-              child: Text(appState.translate('cancel')),
+              child: Text(
+                appState.translate('cancel'),
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
             TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
               onPressed: () {
                 Navigator.pop(context);
                 appState.logout();
@@ -28,7 +62,10 @@ class ProfileScreen extends StatelessWidget {
               },
               child: Text(
                 appState.translate('confirm'),
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -190,6 +227,46 @@ class ProfileScreen extends StatelessWidget {
                               ],
                             ),
                           ),
+                          PopupMenuButton<String>(
+                            icon: const Icon(
+                              Icons.more_vert,
+                              color: Color(0xFF64748B),
+                              size: 22,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 4,
+                            offset: const Offset(0, 36),
+                            onSelected: (value) {
+                              if (value == 'logout') {
+                                _handleLogout(context, appState);
+                              }
+                            },
+                            itemBuilder: (BuildContext context) => [
+                              PopupMenuItem<String>(
+                                value: 'logout',
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.logout,
+                                      color: Color(0xFF4B5563),
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      appState.translate('logout'),
+                                      style: const TextStyle(
+                                        color: Color(0xFF1F2937),
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ],
@@ -203,48 +280,8 @@ class ProfileScreen extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(24),
-              itemCount: menuItems.length + 1, // +1 for Logout
+              itemCount: menuItems.length,
               itemBuilder: (context, index) {
-                if (index == menuItems.length) {
-                  // Logout Row
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.red.shade50),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x0A000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          )
-                        ],
-                      ),
-                      child: ListTile(
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.logout, color: Colors.red),
-                        ),
-                        title: Text(
-                          appState.translate('logout'),
-                          style: const TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        onTap: () => _handleLogout(context, appState),
-                      ),
-                    ),
-                  );
-                }
-
                 final item = menuItems[index];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),

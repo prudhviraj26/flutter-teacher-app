@@ -118,7 +118,7 @@ class AllSectionsScreen extends StatelessWidget {
                     ? 'स्वास्थ्य लॉग'
                     : 'Student health logs',
             'icon': Icons.favorite_border_outlined,
-            'route': '/coming-soon/healthRecords',
+            'route': '/health-records',
           },
           {
             'name': appState.translate('examDetails'),

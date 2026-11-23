@@ -134,6 +134,8 @@ class AppState extends ChangeNotifier {
   String? _selectedAcademicYearId;
   bool _isHolidaysLoading = false;
   final List<ExamResult> _examResults = [];
+  final Map<String, HealthRecord> _studentHealthCache = {};
+  bool _isLoadingHealth = false;
 
   // Active Attendance Marking Session
   Map<String, String> _tempAttendance = {}; // studentId -> status ('P' | 'A')
@@ -224,7 +226,8 @@ class AppState extends ChangeNotifier {
   );
 
   List<Student> get students => _students;
-  List<Announcement> get announcements => _announcements;
+  List<Announcement> get announcements =>
+      _announcements.where((a) => a.broadcastType == BroadcastType.classNotice).toList();
   List<ClassUpdate> get classUpdates => _classUpdates;
   List<DailyAttendance> get attendanceHistory => _attendanceHistory;
   List<ParentConversation> get parentConversations => _parentConversations;
@@ -239,6 +242,25 @@ class AppState extends ChangeNotifier {
   String? get selectedAcademicYearId => _selectedAcademicYearId;
   bool get isHolidaysLoading => _isHolidaysLoading;
   List<ExamResult> get examResults => _examResults;
+  bool get isLoadingHealth => _isLoadingHealth;
+
+  HealthRecord? getCachedStudentHealth(String studentId) => _studentHealthCache[studentId];
+
+  Future<HealthRecord> fetchStudentHealthRecord(Student student, {bool forceRefresh = false}) async {
+    if (!forceRefresh && _studentHealthCache.containsKey(student.id)) {
+      return _studentHealthCache[student.id]!;
+    }
+    _isLoadingHealth = true;
+    notifyListeners();
+    try {
+      final record = await TeacherDataService.fetchStudentHealth(student.id, studentFallback: student);
+      _studentHealthCache[student.id] = record;
+      return record;
+    } finally {
+      _isLoadingHealth = false;
+      notifyListeners();
+    }
+  }
 
   Map<String, String> get tempAttendance => _tempAttendance;
   Map<String, String> get tempAttendanceReasons => _tempAttendanceReasons;
@@ -974,11 +996,21 @@ class AppState extends ChangeNotifier {
       if (staffStored != null && staffStored.isNotEmpty) {
         final List<dynamic> list = json.decode(staffStored);
         _staffNotices = list.map((item) => StaffNotice.fromJson(item as Map<String, dynamic>)).toList();
+        _staffNotices.sort((a, b) {
+          final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+          final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+          return dtB.compareTo(dtA);
+        });
       }
       final schoolStored = _prefs?.getString('veyho_teacher_school_notices_$teacherId');
       if (schoolStored != null && schoolStored.isNotEmpty) {
         final List<dynamic> list = json.decode(schoolStored);
         _notices = list.map((item) => Notice.fromJson(item as Map<String, dynamic>)).toList();
+        _notices.sort((a, b) {
+          final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+          final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+          return dtB.compareTo(dtA);
+        });
       }
     } catch (e) {
       debugPrint("Error loading cached notices: $e");
@@ -1021,11 +1053,11 @@ class AppState extends ChangeNotifier {
       }
       await _saveReadNoticeIds();
 
-      // Sort newest first by fullDate/date
+      // Sort newest first by fullDate/date (descending)
       ayAnnouncements.sort((a, b) {
-        final aDt = a.fullDate ?? a.date;
-        final bDt = b.fullDate ?? b.date;
-        return bDt.compareTo(aDt);
+        final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+        final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+        return dtB.compareTo(dtA);
       });
 
       // 1. Staff Notices: Strictly broadcasts with scope == 'Staff' (staff_only)
@@ -1038,7 +1070,7 @@ class AppState extends ChangeNotifier {
         date: a.date,
         time: a.time,
         fullDate: a.fullDate,
-        category: 'Meeting',
+        category: '',
         attachments: a.attachmentObjects,
       )).toList();
 
@@ -1057,21 +1089,15 @@ class AppState extends ChangeNotifier {
 
       // 3. Class Announcements:
       // Filter out any communications sent via Class Update module (Classwork and Homework)
-      // and only include:
-      // - Announcements composed by the teacher himself/herself
-      // - Announcements sent by the Admin via webadmin portal targeted to this teacher's class/section
+      // and only include genuine class notices (BroadcastType.classNotice)
       final classList = ayAnnouncements.where((a) {
         // Exclude staff and school wide general notices
         if (a.scope == 'Staff' || a.scope == 'School') {
           return false;
         }
 
-        final titleLower = a.title.toLowerCase().trim();
-        // Strict exclusion of Classwork and Homework
-        if (titleLower.startsWith('[classwork]') ||
-            titleLower.startsWith('[homework]') ||
-            titleLower.startsWith('classwork:') ||
-            titleLower.startsWith('homework:')) {
+        // Must strictly be a class_notice
+        if (a.broadcastType != BroadcastType.classNotice) {
           return false;
         }
 
@@ -1134,7 +1160,7 @@ class AppState extends ChangeNotifier {
           title: ann.title,
           message: ann.message,
           targetType: hasSection ? 'section' : 'school',
-          broadcastType: 'class_notice',
+          broadcastType: BroadcastType.classNotice,
           targetSectionId: hasSection ? _teacher!.sectionId : null,
           attachments: rawAttachments ?? ann.attachments,
         );
@@ -1232,17 +1258,21 @@ class AppState extends ChangeNotifier {
     final teacherId = _teacher?.id ?? 'default';
 
     String normalizeText(String s) {
-      var cleaned = s.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '');
-      cleaned = cleaned.replaceAll(RegExp(r'(?i)\b(regards|with regards|thanks|thank you)\b.*$', dotAll: true), '');
+      var cleaned = s.replaceAll(RegExp(r'\bdue(\s+date)?\s*:\s*.*$', caseSensitive: false), '');
+      cleaned = cleaned.replaceAll(RegExp(r'\b(regards|with regards|thanks|thank you)\b.*$', caseSensitive: false, dotAll: true), '');
       return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
     }
 
     String makeFingerprint(ClassUpdate u) {
       var subj = u.subject.trim().toLowerCase();
       if (subj.isEmpty || subj == 'general') {
-        if (u.title.toLowerCase().contains('science')) subj = 'science';
-        else if (u.title.toLowerCase().contains('math')) subj = 'mathematics';
-        else if (u.title.toLowerCase().contains('english')) subj = 'english';
+        if (u.title.toLowerCase().contains('science')) {
+          subj = 'science';
+        } else if (u.title.toLowerCase().contains('math')) {
+          subj = 'mathematics';
+        } else if (u.title.toLowerCase().contains('english')) {
+          subj = 'english';
+        }
       }
       final norm = normalizeText(u.description);
       final core = norm.length > 40 ? norm.substring(0, 40) : norm;
@@ -1328,32 +1358,10 @@ class AppState extends ChangeNotifier {
 
   // Add Class Update with live API Sync to Web Admin Sent Items
   Future<void> addClassUpdate(ClassUpdate update, {List<dynamic>? rawAttachments}) async {
-    String normalizeText(String s) {
-      var cleaned = s.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '');
-      cleaned = cleaned.replaceAll(RegExp(r'(?i)\b(regards|with regards|thanks|thank you)\b.*$', dotAll: true), '');
-      return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
-    }
-    String makeFingerprint(ClassUpdate u) {
-      var subj = u.subject.trim().toLowerCase();
-      if (subj.isEmpty || subj == 'general') {
-        if (u.title.toLowerCase().contains('science')) subj = 'science';
-        else if (u.title.toLowerCase().contains('math')) subj = 'mathematics';
-        else if (u.title.toLowerCase().contains('english')) subj = 'english';
-      }
-      final norm = normalizeText(u.description);
-      final core = norm.length > 40 ? norm.substring(0, 40) : norm;
-      return "${u.type.trim().toLowerCase()}_${subj}_$core";
-    }
-    final fp = makeFingerprint(update);
-    final exists = _classUpdates.any((u) => makeFingerprint(u) == fp);
-    if (exists) {
-      return;
-    }
-
     _classUpdates.insert(0, update);
     _readNoticeIds.add(update.id);
     await _saveReadNoticeIds();
-    _saveClassUpdates();
+    await _saveClassUpdates();
     notifyListeners();
 
     if (_loggedIn) {
@@ -1361,7 +1369,9 @@ class AppState extends ChangeNotifier {
         final broadcastTitle = "${update.subject}: ${update.title}";
         final broadcastBody = update.description;
         final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
-        final broadcastType = update.type.toLowerCase() == 'classwork' ? 'classwork' : 'homework';
+        final broadcastType = update.type.toLowerCase() == 'classwork'
+            ? BroadcastType.classwork
+            : BroadcastType.homework;
         final res = await TeacherDataService.createBroadcast(
           title: broadcastTitle,
           message: broadcastBody,
@@ -1384,6 +1394,7 @@ class AppState extends ChangeNotifier {
             notifyListeners();
           }
         }
+        await refreshClassUpdates();
       } catch (e) {
         debugPrint("Error syncing class update to API: $e");
       }

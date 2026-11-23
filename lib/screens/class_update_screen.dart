@@ -18,6 +18,7 @@ class ClassUpdateScreen extends StatefulWidget {
 }
 
 class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
+  final ScrollController _scrollController = ScrollController();
   bool _showPostForm = false;
   bool _isPosting = false;
   String _type = 'Classwork'; // 'Classwork' | 'Homework'
@@ -44,6 +45,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _descriptionController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -308,6 +310,8 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
         rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
       );
 
+      await appState.refreshClassUpdates();
+
       if (mounted) {
         _showSnackBar(appState.translate('updatePosted'), AppColors.success);
 
@@ -320,6 +324,11 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
           _showPostForm = false;
           _failedToPost = false;
         });
+      }
+    } catch (e) {
+      debugPrint('Error posting class update: $e');
+      if (mounted) {
+        _showSnackBar('Failed to post update: $e', AppColors.destructive);
       }
     } finally {
       if (mounted) {
@@ -479,15 +488,34 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(
-                                    appState.translate('classUpdate'),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        appState.translate('classUpdate'),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (teacher?.assignedClass != null) ...[
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          teacher!.assignedClass!,
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.85),
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ),
                               ],
@@ -567,31 +595,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                       : const Icon(Icons.refresh, color: Colors.white, size: 17),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    _showPostForm = !_showPostForm;
-                                    if (_showPostForm) {
-                                      _isSearchOpen = false;
-                                      if (_filterType.toLowerCase() == 'homework') {
-                                        _type = 'Homework';
-                                      } else if (_filterType.toLowerCase() == 'classwork') {
-                                        _type = 'Classwork';
-                                      }
-                                    }
-                                  });
-                                },
-                                child: Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.2),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white, size: 18),
-                                ),
-                              ),
+
                             ],
                           ),
                         ],
@@ -643,8 +647,9 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
               onRefresh: () => appState.refreshClassUpdates(),
               color: AppColors.primary,
               child: ListView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
                 // Post Form
                 if (_showPostForm) ...[
@@ -1111,160 +1116,165 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                     ),
                   ),
                 ] else ...[
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredUpdates.length,
-                  itemBuilder: (context, index) {
-                    final item = filteredUpdates[index];
-                    final isAuthoredByTeacher = (appState.teacher?.id != null && item.teacherId == appState.teacher!.id) ||
-                        (appState.teacher?.name != null && item.teacherName.toLowerCase() == appState.teacher!.name.toLowerCase());
-                    final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
-                    final isHomework = item.isHomework;
-                    final iconBg = isHomework ? AppColors.secondary.withValues(alpha: 0.1) : AppColors.primary.withValues(alpha: 0.1);
-                    final iconColor = isHomework ? AppColors.secondary : AppColors.primary;
+                  for (final item in filteredUpdates) ...[
+                    Builder(
+                      builder: (context) {
+                        final isAuthoredByTeacher = (appState.teacher?.id != null && item.teacherId == appState.teacher!.id) ||
+                            (appState.teacher?.name != null && item.teacherName.toLowerCase() == appState.teacher!.name.toLowerCase());
+                        final isUnread = !isAuthoredByTeacher && !appState.isNoticeRead(item.id);
+                        final isHomework = item.isHomework;
+                        final iconBg = isHomework ? AppColors.secondary.withValues(alpha: 0.1) : AppColors.primary.withValues(alpha: 0.1);
+                        final iconColor = isHomework ? AppColors.secondary : AppColors.primary;
+                        final hasAttachments = (item.attachments != null && item.attachments!.isNotEmpty) ||
+                            item.attachmentObjects.isNotEmpty;
+                        final attachmentCount = item.attachmentObjects.isNotEmpty
+                            ? item.attachmentObjects.length
+                            : (item.attachments?.length ?? 0);
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
-                            width: isUnread ? 1.5 : 1.0,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x0A000000),
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            )
-                          ],
-                        ),
-                        child: InkWell(
-                          onTap: () {
-                            appState.markClassUpdateAsRead(item.id);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ClassUpdateDetailScreen(
-                                  update: item,
-                                  themeColor: iconColor,
-                                ),
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isUnread ? iconColor.withValues(alpha: 0.5) : const Color(0xFFF3F4F6),
+                                width: isUnread ? 1.5 : 1.0,
                               ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(16),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: iconBg,
-                                    shape: BoxShape.circle,
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x0A000000),
+                                  blurRadius: 4,
+                                  offset: Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: InkWell(
+                              onTap: () {
+                                appState.markClassUpdateAsRead(item.id);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ClassUpdateDetailScreen(
+                                      update: item,
+                                      themeColor: iconColor,
+                                    ),
                                   ),
-                                  child: Icon(Icons.menu_book, color: iconColor),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: iconBg,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(Icons.menu_book, color: iconColor),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Expanded(
-                                            child: Row(
-                                              children: [
-                                                if (isUnread)
-                                                  Container(
-                                                    width: 8,
-                                                    height: 8,
-                                                    margin: const EdgeInsets.only(right: 6),
-                                                    decoration: BoxDecoration(
-                                                      color: iconColor,
-                                                      shape: BoxShape.circle,
-                                                    ),
+                                          Row(
+                                            children: [
+                                              if (isUnread)
+                                                Container(
+                                                  width: 8,
+                                                  height: 8,
+                                                  margin: const EdgeInsets.only(right: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: iconColor,
+                                                    shape: BoxShape.circle,
                                                   ),
-                                                Expanded(
-                                                  child: Text(
-                                                    item.title,
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
-                                                      color: const Color(0xFF1F2937),
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
+                                                ),
+                                              Expanded(
+                                                child: Text(
+                                                  item.title,
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: isUnread ? FontWeight.bold : FontWeight.w600,
+                                                    color: const Color(0xFF1F2937),
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (hasAttachments) ...[
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF3F4F6),
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.attach_file, size: 12, color: Colors.grey.shade700),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        '$attachmentCount',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.grey.shade700,
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                               ],
-                                            ),
+                                            ],
                                           ),
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: iconBg,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            child: Text(
-                                              appState.translate(item.type.toLowerCase()),
-                                              style: TextStyle(
-                                                color: iconColor,
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Text(item.subject, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                              const SizedBox(width: 6),
+                                              const Text('•', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                              const SizedBox(width: 6),
+                                              const Icon(Icons.calendar_month, size: 12, color: Colors.grey),
+                                              const SizedBox(width: 4),
+                                              Text(item.date, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                            ],
                                           ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            item.description,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey.shade600,
+                                              height: 1.4,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          if (item.dueDate != null) ...[
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Due: ${item.dueDate}',
+                                              style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
+                                            ),
+                                          ],
                                         ],
                                       ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Text(item.subject, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                          const SizedBox(width: 6),
-                                          const Text('•', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                          const SizedBox(width: 6),
-                                          const Icon(Icons.calendar_month, size: 12, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Text(item.date, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        item.description,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.grey.shade600,
-                                          height: 1.4,
-                                        ),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      if (item.dueDate != null) ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'Due: ${item.dueDate}',
-                                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -1272,6 +1282,47 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
         ),
         ],
       ),
+      floatingActionButton: _showPostForm
+          ? null
+          : ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _showPostForm = true;
+                  _isSearchOpen = false;
+                  if (_classSection.isEmpty && availableClasses.isNotEmpty) {
+                    _classSection = availableClasses.first;
+                  }
+                  if (_subject.isEmpty && availableSubjects.isNotEmpty) {
+                    _subject = availableSubjects.first;
+                  }
+                  if (_filterType.toLowerCase() == 'homework') {
+                    _type = 'Homework';
+                  } else if (_filterType.toLowerCase() == 'classwork') {
+                    _type = 'Classwork';
+                  }
+                });
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                elevation: 6,
+                shadowColor: AppColors.primary.withValues(alpha: 0.4),
+              ),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(
+                appState.translate('newUpdate'),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

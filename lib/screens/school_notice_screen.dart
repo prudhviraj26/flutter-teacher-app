@@ -263,6 +263,8 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                       itemBuilder: (context, index) {
                         final notice = filteredNotices[index];
                         final isUnread = !appState.isNoticeRead(notice.id);
+                        final hasAttachments = notice.attachments.isNotEmpty;
+                        final attachmentCount = notice.attachments.length;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: Container(
@@ -351,43 +353,77 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
                                                       overflow: TextOverflow.ellipsis,
                                                     ),
                                                   ),
+                                                  if (hasAttachments) ...[
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFF3F4F6),
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Icon(Icons.attach_file, size: 12, color: Colors.grey.shade700),
+                                                          const SizedBox(width: 2),
+                                                          Text(
+                                                            '$attachmentCount',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.grey.shade700,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ],
                                               ),
                                               const SizedBox(height: 2),
-                                              Text(
-                                                notice.source.isNotEmpty
-                                                    ? '${notice.source} • School Notice'
-                                                    : 'School Notice',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Color(0xFF64748B),
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
+                                              Row(
+                                                children: [
+                                                  if (notice.source.isNotEmpty) ...[
+                                                    Flexible(
+                                                      child: Text(
+                                                        notice.source,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: Color(0xFF64748B),
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    const Text(
+                                                      '•',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Color(0xFF94A3B8),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                  ],
+                                                  const Icon(
+                                                    Icons.calendar_month,
+                                                    size: 12,
+                                                    color: Color(0xFF94A3B8),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    _formatDate(notice.date, appState.language),
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      color: Color(0xFF64748B),
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              _formatDate(notice.date, appState.language),
-                                              style: const TextStyle(
-                                                fontSize: 10.5,
-                                                color: Color(0xFF94A3B8),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            const Icon(
-                                              Icons.chevron_right,
-                                              size: 16,
-                                              color: Color(0xFFCBD5E1),
-                                            ),
-                                          ],
                                         ),
                                       ],
                                     ),

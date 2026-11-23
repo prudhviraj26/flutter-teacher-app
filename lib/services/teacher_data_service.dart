@@ -75,9 +75,9 @@ class TeacherDataService {
   }
 
   // Fetch School Broadcasts / Announcements
-  static Future<List<Announcement>> fetchBroadcasts() async {
+  static Future<List<Announcement>> fetchBroadcasts({int pageSize = 500}) async {
     try {
-      final response = await ApiService.get('/communication/broadcasts');
+      final response = await ApiService.get('/communication/broadcasts?pageSize=$pageSize');
       List? list;
       if (response is List) {
         list = response;
@@ -123,7 +123,7 @@ class TeacherDataService {
     required String title,
     required String message,
     required String targetType, // 'class' | 'section' | 'school' | 'staff_only'
-    String? broadcastType, // 'school_notice' | 'class_notice' | 'homework' | 'classwork'
+    BroadcastType? broadcastType,
     String? targetClassId,
     List<String>? targetClassIds,
     String? targetSectionId,
@@ -135,7 +135,7 @@ class TeacherDataService {
         'title': title,
         'body': message,
         'targetType': targetType,
-        if (broadcastType != null) 'broadcastType': broadcastType,
+        if (broadcastType != null) 'broadcastType': broadcastType.value,
         'channels': ['in_app', 'push_fcm'],
         if (targetClassId != null) 'targetClassId': targetClassId,
         if (targetClassIds != null) 'targetClassIds': targetClassIds,
@@ -531,6 +531,11 @@ class TeacherDataService {
 
     final bool isRead = json['isRead'] == true || json['is_read'] == true;
 
+    final String? rawType = json['broadcastType']?.toString().toLowerCase() ??
+        json['broadcast_type']?.toString().toLowerCase();
+    final defaultType = targetType == 'school' ? 'school_notice' : 'class_notice';
+    final BroadcastType broadcastType = BroadcastType.fromString(rawType ?? defaultType);
+
     return Announcement(
       id: id,
       title: title,
@@ -545,6 +550,7 @@ class TeacherDataService {
       attachments: stringAttachments,
       attachmentObjects: attachmentObjects,
       isRead: isRead,
+      broadcastType: broadcastType,
     );
   }
 
@@ -615,7 +621,7 @@ class TeacherDataService {
   // Fetch Class Updates (Homework & Classwork) from Backend API
   static Future<List<ClassUpdate>> fetchClassUpdates() async {
     try {
-      final response = await ApiService.get('/communication/broadcasts?pageSize=50');
+      final response = await ApiService.get('/communication/broadcasts?pageSize=500');
       List? list;
       if (response is List) {
         list = response;
@@ -659,7 +665,7 @@ class TeacherDataService {
     }
 
     String description = json['body'] ?? json['message'] ?? '';
-    description = description.replaceAll(RegExp(r'(?i)\bdue(\s+date)?\s*:\s*.*$'), '').trim();
+    description = description.replaceAll(RegExp(r'\bdue(\s+date)?\s*:\s*.*$', caseSensitive: false), '').trim();
     final String teacherName = json['senderName'] ?? json['author'] ?? 'Teacher';
     final String teacherId = json['senderStaffId'] ?? json['authorId'] ?? '';
 
@@ -703,4 +709,22 @@ class TeacherDataService {
     );
   }
 
+  // Fetch Student Health / Medical details
+  static Future<HealthRecord> fetchStudentHealth(String studentId, {Student? studentFallback}) async {
+    try {
+      final response = await ApiService.get('/students/$studentId');
+      if (response is Map<String, dynamic>) {
+        return HealthRecord.fromJson(response);
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchStudentHealth error: $e');
+    }
+    return HealthRecord.empty(
+      studentId,
+      fullName: studentFallback?.name,
+      bloodGroup: studentFallback?.bloodGroup,
+      parentName: studentFallback?.parentName,
+      parentMobile: studentFallback?.parentMobile,
+    );
+  }
 }

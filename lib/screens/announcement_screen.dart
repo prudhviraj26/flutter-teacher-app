@@ -18,6 +18,7 @@ class AnnouncementScreen extends StatefulWidget {
 }
 
 class _AnnouncementScreenState extends State<AnnouncementScreen> {
+  final ScrollController _scrollController = ScrollController();
   bool _showPostForm = false;
   bool _isPosting = false;
   final TextEditingController _titleController = TextEditingController();
@@ -41,6 +42,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _titleController.dispose();
     _messageController.dispose();
     _searchController.dispose();
@@ -538,26 +540,6 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                                   : const Icon(Icons.refresh, color: Colors.white, size: 17),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _showPostForm = !_showPostForm;
-                                if (_showPostForm) {
-                                  _isSearchOpen = false;
-                                }
-                              });
-                            },
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(_showPostForm ? Icons.close : Icons.add, color: Colors.white, size: 18),
-                            ),
-                          ),
                         ],
                       ),
                     ],
@@ -570,6 +552,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
               onRefresh: () => appState.refreshBroadcasts(),
               color: AppColors.secondary,
               child: ListView(
+                controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
                 children: [
@@ -967,6 +950,11 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     final isTeal = index % 2 == 0;
                     final iconBg = isTeal ? AppColors.primary.withValues(alpha: 0.1) : AppColors.secondary.withValues(alpha: 0.1);
                     final iconColor = isTeal ? AppColors.primary : AppColors.secondary;
+                    final hasAttachments = (item.attachments != null && item.attachments!.isNotEmpty) ||
+                        item.attachmentObjects.isNotEmpty;
+                    final attachmentCount = item.attachmentObjects.isNotEmpty
+                        ? item.attachmentObjects.length
+                        : (item.attachments?.length ?? 0);
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
@@ -1046,6 +1034,31 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
+                                              if (hasAttachments) ...[
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF3F4F6),
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                  child: Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Icon(Icons.attach_file, size: 12, color: Colors.grey.shade700),
+                                                      const SizedBox(width: 2),
+                                                      Text(
+                                                        '$attachmentCount',
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: Colors.grey.shade700,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
                                             ],
                                           ),
                                           const SizedBox(height: 2),
@@ -1076,49 +1089,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                if (item.scope == 'Class' && item.classScope != null) ...[
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: iconBg,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        child: Text(
-                                          item.classScope!,
-                                          style: TextStyle(
-                                            color: iconColor,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      if (item.attachments != null && item.attachments!.isNotEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFF3F4F6),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.attach_file, size: 12, color: Colors.grey.shade700),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                '${item.attachments!.length}',
-                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
+
                               ],
                             ),
                           ),
@@ -1132,6 +1103,36 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
         ),
         ],
       ),
+      floatingActionButton: _showPostForm
+          ? null
+          : ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _showPostForm = true;
+                  _isSearchOpen = false;
+                });
+                if (_scrollController.hasClients) {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.secondary,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                elevation: 6,
+                shadowColor: AppColors.secondary.withValues(alpha: 0.4),
+              ),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: Text(
+                appState.translate('newAnnouncement'),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

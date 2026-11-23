@@ -802,6 +802,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
   Timer? _pollingTimer;
   AppState? _appState;
   double _previousBottomInset = 0.0;
+  bool _showScrollToBottom = false;
 
   @override
   void didChangeDependencies() {
@@ -815,6 +816,10 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
     WidgetsBinding.instance.addObserver(this);
     // Track active chat to suppress duplicate foreground push notification banner
     NotificationNavigationService.activeChatParentId = widget.parentId;
+
+    // Track scroll position to show/hide "scroll to latest" button
+    _scrollController.addListener(_onScrollChanged);
+
     // Mark conversation read on enter & fetch initial messages
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -829,15 +834,12 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
       NotificationNavigationService.activeChatThreadId = conv?.threadId ?? widget.parentId;
       appState.markChatAsRead(widget.parentId);
       appState.fetchTeacherThreadMessages(widget.parentId);
-      _scrollToBottom(delayMs: 100);
-      _scrollToBottom(delayMs: 300);
     });
 
-    // Auto-scroll to latest message when keyboard pops up
+    // Auto-scroll to latest message when keyboard pops up if user is near bottom
     _focusNode.addListener(() {
-      if (_focusNode.hasFocus) {
-        _scrollToBottom(delayMs: 150);
-        _scrollToBottom(delayMs: 350);
+      if (_focusNode.hasFocus && _scrollController.hasClients && _scrollController.offset < 200) {
+        _scrollToBottom(delayMs: 100);
       }
     });
 
@@ -846,6 +848,16 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
     });
 
     _startPolling();
+  }
+
+  void _onScrollChanged() {
+    if (!_scrollController.hasClients) return;
+    final show = _scrollController.offset > 250;
+    if (show != _showScrollToBottom && mounted) {
+      setState(() {
+        _showScrollToBottom = show;
+      });
+    }
   }
 
   void _startPolling() {
@@ -863,6 +875,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
     NotificationNavigationService.activeChatThreadId = null;
     NotificationNavigationService.activeChatParentId = null;
     _pollingTimer?.cancel();
+    _scrollController.removeListener(_onScrollChanged);
     _msgController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -875,22 +888,29 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
     super.didChangeMetrics();
     final bottomInset = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
     if (bottomInset > _previousBottomInset && bottomInset > 100) {
-      // Virtual keyboard expanded: trigger dual-phase auto-scroll
-      _scrollToBottom(delayMs: 100);
-      _scrollToBottom(delayMs: 350);
+      // Virtual keyboard expanded: keep latest message in view if user was near bottom
+      if (_scrollController.hasClients && _scrollController.offset < 200) {
+        _scrollToBottom(delayMs: 100);
+      }
     }
     _previousBottomInset = bottomInset;
   }
 
-  void _scrollToBottom({int delayMs = 150}) {
-    Timer(Duration(milliseconds: delayMs), () {
+  void _scrollToBottom({int delayMs = 0}) {
+    void execute() {
       if (!mounted || !_scrollController.hasClients) return;
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+        0.0,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOutQuad,
       );
-    });
+    }
+
+    if (delayMs > 0) {
+      Timer(Duration(milliseconds: delayMs), execute);
+    } else {
+      execute();
+    }
   }
 
   void _sendMessage(AppState appState) {
@@ -1136,34 +1156,38 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
           
           // Chat Messages
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => FocusScope.of(context).unfocus(),
-              child: ListView.builder(
-                controller: _scrollController,
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                itemCount: conv.messages.length,
-              itemBuilder: (context, index) {
-                final msg = conv.messages[index];
-                final isTeacher = msg.sender == 'teacher';
-                final isFailed = msg.failed;
+            child: Stack(
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    reverse: true,
+                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                    itemCount: conv.messages.length,
+                    itemBuilder: (context, index) {
+                      final k = conv.messages.length - 1 - index;
+                      final msg = conv.messages[k];
+                      final isTeacher = msg.sender == 'teacher';
+                      final isFailed = msg.failed;
 
-                final currDate = _parseMessageDate(msg.timestamp);
-                bool showDateSeparator = false;
-                if (currDate != null) {
-                  if (index == 0) {
-                    showDateSeparator = true;
-                  } else {
-                    final prevDate = _parseMessageDate(conv.messages[index - 1].timestamp);
-                    if (prevDate == null ||
-                        prevDate.year != currDate.year ||
-                        prevDate.month != currDate.month ||
-                        prevDate.day != currDate.day) {
-                      showDateSeparator = true;
-                    }
-                  }
-                }
+                      final currDate = _parseMessageDate(msg.timestamp);
+                      bool showDateSeparator = false;
+                      if (currDate != null) {
+                        if (k == 0) {
+                          showDateSeparator = true;
+                        } else {
+                          final prevDate = _parseMessageDate(conv.messages[k - 1].timestamp);
+                          if (prevDate == null ||
+                              prevDate.year != currDate.year ||
+                              prevDate.month != currDate.month ||
+                              prevDate.day != currDate.day) {
+                            showDateSeparator = true;
+                          }
+                        }
+                      }
 
                 Widget bubble;
                 if (isFailed) {
@@ -1385,7 +1409,36 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
               },
             ),
           ),
-        ),
+          if (_showScrollToBottom)
+            Positioned(
+              right: 16,
+              bottom: 12,
+              child: Material(
+                elevation: 4,
+                shape: const CircleBorder(),
+                color: Colors.white,
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => _scrollToBottom(),
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
+                    ),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 24,
+                      color: AppColors.secondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    ),
           
           //Composer bar
           Container(

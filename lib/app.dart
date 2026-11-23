@@ -22,6 +22,7 @@ import 'screens/all_sections_screen.dart';
 import 'screens/holiday_event_screens.dart';
 import 'screens/coming_soon_screen.dart';
 import 'screens/profile_menu_screens.dart';
+import 'screens/health_records_screen.dart';
 
 class TeacherApp extends StatelessWidget {
   const TeacherApp({super.key});
@@ -72,6 +73,7 @@ class TeacherApp extends StatelessWidget {
             '/staff-notice': (context) => const StaffNoticeScreen(),
             '/school-notice': (context) => const SchoolNoticeScreen(),
             '/all-sections': (context) => const AllSectionsScreen(),
+            '/health-records': (context) => const HealthRecordsScreen(),
             '/holidays': (context) => const HolidaysScreen(),
             '/events': (context) => const EventsScreen(),
             '/events/detail': (context) => const EventDetailScreen(),

@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../widgets/veyho_logo.dart';
 import '../constants/colors.dart';
-import 'profile_menu_screens.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

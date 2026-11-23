@@ -1,4 +1,7 @@
 import 'package:intl/intl.dart';
+export 'broadcast_type.dart';
+export 'health_record.dart';
+import 'broadcast_type.dart';
 
 class Teacher {
   final String id;
@@ -284,6 +287,7 @@ class Announcement {
   final List<String>? attachments;
   final List<NoticeAttachment> attachmentObjects;
   final bool isRead;
+  final BroadcastType broadcastType;
 
   Announcement({
     required this.id,
@@ -299,6 +303,7 @@ class Announcement {
     this.attachments,
     this.attachmentObjects = const [],
     this.isRead = false,
+    this.broadcastType = BroadcastType.classNotice,
   });
 }
 
