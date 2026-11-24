@@ -55,7 +55,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
     try {
-      await Provider.of<AppState>(context, listen: false).refreshClassUpdates();
+      await Provider.of<AppState>(context, listen: false).refreshClassUpdates(forceFull: true);
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
@@ -644,7 +644,7 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
           // Content Scroll
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => appState.refreshClassUpdates(),
+              onRefresh: () => appState.refreshClassUpdates(forceFull: true),
               color: AppColors.primary,
               child: ListView(
                 controller: _scrollController,
@@ -974,88 +974,28 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                   const SizedBox(height: 16),
                 ],
                 
-                // List Updates or Empty State
+                // List Updates or Empty State (subtle borderless indicator; bottom FAB handles creation)
                 if (tabFiltered.isEmpty && !_showPostForm) ...[
                   Container(
-                    margin: const EdgeInsets.only(top: 20),
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x0A000000),
-                          blurRadius: 10,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 48),
                     alignment: Alignment.center,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: (_filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary).withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _filterType.toLowerCase() == 'homework' ? Icons.assignment_outlined : Icons.menu_book,
-                            size: 32,
-                            color: _filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary,
-                          ),
+                        Icon(
+                          _filterType.toLowerCase() == 'homework' ? Icons.assignment_outlined : Icons.menu_book,
+                          size: 48,
+                          color: Colors.grey.shade400,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         Text(
                           _filterType.toLowerCase() == 'all'
                               ? 'No Class Updates Yet'
                               : 'No $_filterType Updates',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _filterType.toLowerCase() == 'all'
-                              ? 'Share homework assignments, classwork, and study materials with your classes.'
-                              : 'No $_filterType entries recorded yet.',
-                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                             color: Colors.grey.shade600,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              if (_filterType.toLowerCase() == 'homework') {
-                                _type = 'Homework';
-                              } else if (_filterType.toLowerCase() == 'classwork') {
-                                _type = 'Classwork';
-                              }
-                              _showPostForm = true;
-                            });
-                          },
-                          icon: const Icon(Icons.add, size: 18),
-                          label: Text(
-                            _filterType.toLowerCase() == 'homework'
-                                ? (appState.language == 'mr' ? 'गृहपाठ जोडा' : appState.language == 'hi' ? 'गृहकार्य जोड़ें' : 'Post Homework')
-                                : _filterType.toLowerCase() == 'classwork'
-                                    ? (appState.language == 'mr' ? 'वर्गकार्य जोडा' : appState.language == 'hi' ? 'कक्षाकार्य जोड़ें' : 'Post Classwork')
-                                    : (appState.language == 'mr' ? 'अपडेट जोडा' : appState.language == 'hi' ? 'अपडेट जोड़ें' : 'Post Class Update'),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _filterType.toLowerCase() == 'homework' ? AppColors.secondary : AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
                       ],

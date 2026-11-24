@@ -7,11 +7,13 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../models/models.dart';
 import '../constants/translations.dart';
 import '../services/auth_service.dart';
 import '../services/teacher_data_service.dart';
 import '../services/attachment_local_store.dart';
+import '../services/gallery_local_store.dart';
 
 enum AuthBootstrapResult {
   authenticated,
@@ -128,7 +130,8 @@ class AppState extends ChangeNotifier {
   List<Notice> _notices = [];
   List<Event> _events = [];
   bool _isEventsLoading = false;
-  final List<Album> _albums = [];
+  List<Album> _albums = [];
+  bool _isGalleryLoading = false;
   List<Holiday> _holidays = [];
   List<AcademicYearItem> _academicYears = [];
   String? _selectedAcademicYearId;
@@ -182,7 +185,7 @@ class AppState extends ChangeNotifier {
       _staffNotices.where((n) => !_readNoticeIds.contains(n.id)).length;
 
   int get unreadAnnouncementsCount {
-    return _announcements.where((a) {
+    return announcements.where((a) {
       final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
           (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
       if (isAuthoredByTeacher) return false;
@@ -191,7 +194,7 @@ class AppState extends ChangeNotifier {
   }
 
   int get unreadClassUpdatesCount {
-    return _classUpdates.where((u) {
+    return classUpdates.where((u) {
       final isAuthoredByTeacher = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
           (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
       if (isAuthoredByTeacher) return false;
@@ -226,9 +229,8 @@ class AppState extends ChangeNotifier {
   );
 
   List<Student> get students => _students;
-  List<Announcement> get announcements =>
-      _announcements.where((a) => a.broadcastType == BroadcastType.classNotice).toList();
-  List<ClassUpdate> get classUpdates => _classUpdates;
+  List<Announcement> get announcements => _filterClassAnnouncements(_announcements);
+  List<ClassUpdate> get classUpdates => _filterClassUpdates(_classUpdates);
   List<DailyAttendance> get attendanceHistory => _attendanceHistory;
   List<ParentConversation> get parentConversations => _parentConversations;
   List<Duty> get duties => _duties;
@@ -237,6 +239,7 @@ class AppState extends ChangeNotifier {
   List<Event> get events => _events;
   bool get isEventsLoading => _isEventsLoading;
   List<Album> get albums => _albums;
+  bool get isGalleryLoading => _isGalleryLoading;
   List<Holiday> get holidays => _holidays;
   List<AcademicYearItem> get academicYears => _academicYears;
   String? get selectedAcademicYearId => _selectedAcademicYearId;
@@ -299,7 +302,12 @@ class AppState extends ChangeNotifier {
       final refreshed = await ApiService.refreshTokenSilently();
       if (refreshed) {
         _loggedIn = true;
-        loadLiveData(skipGetMe: true);
+        // Silent session re-hydration: Replicates login by fetching /auth/me and syncing fresh models
+        try {
+          await loadLiveData(skipGetMe: false).timeout(const Duration(seconds: 4));
+        } catch (_) {
+          loadLiveData(skipGetMe: false);
+        }
         return AuthBootstrapResult.authenticated;
       }
     } catch (e) {
@@ -315,9 +323,43 @@ class AppState extends ChangeNotifier {
     return AuthBootstrapResult.unauthenticated;
   }
 
+  /// Automated cache invalidation & migration hook triggered when APK is upgraded
+  Future<void> _checkAppVersionUpgrade() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentBuild = '${packageInfo.version}+${packageInfo.buildNumber}';
+      final storedBuild = _prefs?.getString('veyho_app_build_version');
+
+      if (storedBuild != currentBuild) {
+        debugPrint('[AppUpgrade] Teacher App update detected: $storedBuild -> $currentBuild');
+
+        // 1. Wipe stale delta sync watermarks to force full fresh sync of notices, broadcasts, and rosters
+        final keys = _prefs?.getKeys() ?? <String>{};
+        for (final key in keys) {
+          if (key.startsWith('veyho_last_broadcast_sync_') ||
+              key.startsWith('veyho_last_teacher_broadcast_sync_') ||
+              key.startsWith('veyho_last_sync_')) {
+            await _prefs?.remove(key);
+          }
+        }
+
+        // 2. Clear old cached notices/updates list so cards re-render cleanly
+        await _prefs?.remove('cached_notices');
+        await _prefs?.remove('cached_class_updates');
+
+        // 3. Update stored build version
+        await _prefs?.setString('veyho_app_build_version', currentBuild);
+        debugPrint('[AppUpgrade] Cache migration complete for build $currentBuild');
+      }
+    } catch (e) {
+      debugPrint('[AppUpgrade] Version check error: $e');
+    }
+  }
+
   // Init Shared Preferences
   Future<void> _initPreferences() async {
     _prefs = await SharedPreferences.getInstance();
+    await _checkAppVersionUpgrade();
     
     // Load language
     _language = _prefs?.getString('veyho_language') ?? 'en';
@@ -367,11 +409,23 @@ class AppState extends ChangeNotifier {
           _prefs?.getString('veyho_teacher_avatar_${_teacher!.id}');
     }
 
+    // Load cached academic years if available
+    final cachedYearsJson = _prefs?.getString('veyho_cached_academic_years');
+    if (cachedYearsJson != null && cachedYearsJson.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(cachedYearsJson);
+        _academicYears = list.map((item) => AcademicYearItem.fromJson(item as Map<String, dynamic>)).toList();
+      } catch (e) {
+        debugPrint("Error loading cached academic years: $e");
+      }
+    }
+
     // Load cached notices, class updates, and parent conversations immediately on startup
     await _loadReadNoticeIds();
     await _loadCachedNotices();
-    await _loadClassUpdates();
+    await _loadCachedClassUpdates();
     await _loadCachedParentConversations();
+    await _loadCachedAlbums();
 
     notifyListeners();
 
@@ -455,7 +509,6 @@ class AppState extends ChangeNotifier {
     debugPrint('[AppState] syncLiveData: auto-refreshing teacher live data in background');
     try {
       await loadLiveData(skipGetMe: false);
-      await refreshBroadcasts();
     } catch (e) {
       debugPrint('[AppState] syncLiveData error: $e');
     }
@@ -534,6 +587,16 @@ class AppState extends ChangeNotifier {
               _teacher!.id,
               _teacher!.employeeId,
             );
+
+            // Persist updated teacher model to SharedPreferences so subsequent cold starts have fresh data
+            final updatedUserData = {
+              'loggedIn': true,
+              'role': role,
+              'teacher': _teacher!.toJson(),
+              'acceptedTermsVersion': _acceptedTermsVersion,
+              'acceptedPrivacyVersion': _acceptedPrivacyVersion,
+            };
+            await _prefs?.setString('veyho_teacher_user', json.encode(updatedUserData));
           }
         } catch (e) {
           debugPrint("AuthService.getMe error during loadLiveData: $e");
@@ -541,6 +604,13 @@ class AppState extends ChangeNotifier {
       }
 
       final String? teacherSectionId = _teacher?.sectionId;
+
+      // Proactively ensure academic years are loaded & rollover cache check runs before delta sync
+      try {
+        await fetchAcademicYearsAndHolidays(silent: true);
+      } catch (hErr) {
+        debugPrint("Error fetching live academic years: $hErr");
+      }
 
       // Run independent data fetching pipelines concurrently
       await Future.wait([
@@ -582,22 +652,17 @@ class AppState extends ChangeNotifier {
           }
         }(),
 
-        // Pipeline 3: Broadcasts and notices (updates notification badge counters)
+        // Pipeline 3: Unified Broadcast & Class Updates Delta Sync (updates notification badge counters)
         () async {
           try {
-            await refreshBroadcasts();
+            await syncBroadcasts();
           } catch (e) {
-            debugPrint("Error refreshing broadcasts: $e");
+            debugPrint("Error syncing broadcasts: $e");
           }
         }(),
 
-        // Pipeline 4: School holidays, academic years & school events
+        // Pipeline 4: School events
         () async {
-          try {
-            await fetchAcademicYearsAndHolidays(silent: true);
-          } catch (hErr) {
-            debugPrint("Error fetching live holidays: $hErr");
-          }
           try {
             await refreshEvents(silent: true);
           } catch (eErr) {
@@ -614,12 +679,12 @@ class AppState extends ChangeNotifier {
           }
         }(),
 
-        // Pipeline 6: Live Class updates (homework & classwork)
+        // Pipeline 6: Media Gallery Albums
         () async {
           try {
-            await _loadClassUpdates();
-          } catch (e) {
-            debugPrint("Error fetching class updates: $e");
+            await fetchGallery(silent: true);
+          } catch (gErr) {
+            debugPrint("Error fetching live gallery: $gErr");
           }
         }(),
       ]);
@@ -658,8 +723,6 @@ class AppState extends ChangeNotifier {
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
       }
 
-      await _loadClassUpdates();
-      AttachmentLocalStore.autoCleanupPriorAcademicYear(DateTime(2026, 6, 1));
       initTempAttendance();
 
       // Fetch teacher's monthly attendance for the current month
@@ -875,6 +938,12 @@ class AppState extends ChangeNotifier {
     _profilePic = null;
     _schoolLogoUrl = null;
     _schoolLogoBase64 = null;
+    _staffNotices.clear();
+    _notices.clear();
+    _announcements.clear();
+    _classUpdates.clear();
+    _readNoticeIds.clear();
+    _albums.clear();
     await _prefs?.remove('veyho_teacher_user');
     notifyListeners();
   }
@@ -947,7 +1016,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> markAllAnnouncementsAsRead() async {
-    final unread = _announcements.where((a) => !_readNoticeIds.contains(a.id)).map((a) => a.id).toList();
+    final unread = announcements.where((a) => !_readNoticeIds.contains(a.id)).map((a) => a.id).toList();
     if (unread.isEmpty) return;
     _readNoticeIds.addAll(unread);
     await _saveReadNoticeIds();
@@ -958,7 +1027,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> markAllClassUpdatesAsRead() async {
-    final unread = _classUpdates.where((u) => !_readNoticeIds.contains(u.id)).map((u) => u.id).toList();
+    final unread = classUpdates.where((u) => !_readNoticeIds.contains(u.id)).map((u) => u.id).toList();
     if (unread.isEmpty) return;
     _readNoticeIds.addAll(unread);
     await _saveReadNoticeIds();
@@ -1030,120 +1099,422 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Refresh and sort all broadcasts by timestamp within Academic Year
-  Future<void> refreshBroadcasts() async {
-    try {
-      final liveAnnouncements = await TeacherDataService.fetchBroadcasts();
-      if (liveAnnouncements.isEmpty) {
-        // Keep existing cached notices if API returned empty/failed
-        return;
+  // Class Update normalization and fingerprinting helpers
+  String _normalizeClassUpdateText(String s) {
+    var cleaned = s.replaceAll(RegExp(r'\bdue(\s+date)?\s*:\s*.*$', caseSensitive: false), '');
+    cleaned = cleaned.replaceAll(RegExp(r'\b(regards|with regards|thanks|thank you)\b.*$', caseSensitive: false, dotAll: true), '');
+    return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+  }
+
+  String _makeClassUpdateFingerprint(ClassUpdate u) {
+    var subj = u.subject.trim().toLowerCase();
+    if (subj.isEmpty || subj == 'general') {
+      if (u.title.toLowerCase().contains('science')) {
+        subj = 'science';
+      } else if (u.title.toLowerCase().contains('math')) {
+        subj = 'mathematics';
+      } else if (u.title.toLowerCase().contains('english')) {
+        subj = 'english';
       }
+    }
+    final norm = _normalizeClassUpdateText(u.description);
+    final core = norm.length > 40 ? norm.substring(0, 40) : norm;
+    return "${u.type.trim().toLowerCase()}_${subj}_$core";
+  }
 
-      final ayAnnouncements = liveAnnouncements
-          .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
-          .toList();
+  /// Normalizes class/grade strings (e.g. "Grade 5 - A", "Class 5 A") into a canonical token ("5a")
+  String _canonicalClass(String s) {
+    return s
+        .toLowerCase()
+        .replaceAll('grade', '')
+        .replaceAll('class', '')
+        .replaceAll('-', '')
+        .replaceAll(' ', '')
+        .replaceAll(RegExp(r'[^a-z0-9]'), '')
+        .trim();
+  }
 
-      // Sync backend read status into local read tracking (auto-mark authored notices as read)
-      for (final a in liveAnnouncements) {
-        final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
-            (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
-        if (a.isRead || isAuthoredByTeacher) {
-          _readNoticeIds.add(a.id);
+  /// Collects all canonical class tokens the currently authenticated teacher is assigned to
+  List<String> _getTeacherCanonicalClasses() {
+    final teacherClasses = <String>[];
+    if (_teacher?.assignedClass != null && _teacher!.assignedClass!.isNotEmpty) {
+      final norm = _canonicalClass(_teacher!.assignedClass!);
+      if (norm.isNotEmpty) teacherClasses.add(norm);
+    }
+    if (_teacher?.assignedClasses != null) {
+      for (final c in _teacher!.assignedClasses!) {
+        if (c.isNotEmpty) {
+          final norm = _canonicalClass(c);
+          if (norm.isNotEmpty && !teacherClasses.contains(norm)) {
+            teacherClasses.add(norm);
+          }
         }
       }
-      await _saveReadNoticeIds();
+    }
+    return teacherClasses;
+  }
 
-      // Sort newest first by fullDate/date (descending)
-      ayAnnouncements.sort((a, b) {
-        final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
-        final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
-        return dtB.compareTo(dtA);
+  List<ClassUpdate> _filterClassUpdates(List<ClassUpdate> updates) {
+    final teacherClasses = _getTeacherCanonicalClasses();
+    return updates.where((u) {
+      final isAuthoredByTeacher = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+          (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+      if (isAuthoredByTeacher) return true;
+
+      if (teacherClasses.isEmpty) return false;
+
+      final targetNorm = _canonicalClass(u.classTarget);
+      if (targetNorm.isEmpty || targetNorm == 'all') return false;
+
+      return teacherClasses.contains(targetNorm);
+    }).toList();
+  }
+
+  List<Announcement> _filterClassAnnouncements(List<Announcement> announcements) {
+    final teacherClasses = _getTeacherCanonicalClasses();
+    return announcements.where((a) {
+      if (a.scope == 'Staff' || a.scope == 'School') {
+        return false;
+      }
+
+      if (a.broadcastType != BroadcastType.classNotice) {
+        return false;
+      }
+
+      final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+          (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+
+      if (isAuthoredByTeacher) {
+        return true;
+      }
+
+      if (a.scope == 'Class' || a.scope == 'Direct') {
+        if (teacherClasses.isEmpty || a.classScope == null || a.classScope!.isEmpty) {
+          return false;
+        }
+        if (a.classScope!.toLowerCase().trim() == 'class notice') {
+          return false;
+        }
+
+        final targetNorm = _canonicalClass(a.classScope!);
+        if (targetNorm.isEmpty || targetNorm == 'notice') return false;
+
+        return teacherClasses.contains(targetNorm);
+      }
+
+      return false;
+    }).toList();
+  }
+
+  /// Automatically clears delta sync watermarks, cleans up previous academic year cached
+  /// data, and triggers storage file cleanup if the academic year has rolled over.
+  Future<void> _checkAndPurgePriorAcademicYearCache(AcademicYearItem activeYear) async {
+    final teacherId = _teacher?.id ?? 'default';
+    final storedYearIdKey = 'veyho_active_academic_year_id_$teacherId';
+    final watermarkKey = 'veyho_last_broadcast_sync_$teacherId';
+    final lastKnownYearId = _prefs?.getString(storedYearIdKey);
+
+    if (lastKnownYearId != null && lastKnownYearId != activeYear.id) {
+      debugPrint('[AppState] Academic year rollover detected ($lastKnownYearId -> ${activeYear.id}). Purging prior academic year cache.');
+      // 1. Invalidate delta sync watermark so next sync does a full baseline ingestion with dateFrom = activeYear.startDate
+      await _prefs?.remove(watermarkKey);
+
+      // 2. Purge in-memory records older than active academic year start date
+      final threshold = activeYear.startDate;
+      _staffNotices.removeWhere((n) {
+        final dt = DateTime.tryParse(n.fullDate ?? n.date);
+        return dt != null && dt.isBefore(threshold);
+      });
+      _notices.removeWhere((n) {
+        final dt = DateTime.tryParse(n.fullDate ?? n.date);
+        return dt != null && dt.isBefore(threshold);
+      });
+      _announcements.removeWhere((a) {
+        final dt = DateTime.tryParse(a.fullDate ?? a.date);
+        return dt != null && dt.isBefore(threshold);
+      });
+      _classUpdates.removeWhere((u) {
+        final dt = DateTime.tryParse(u.date);
+        return dt != null && dt.isBefore(threshold);
       });
 
-      // 1. Staff Notices: Strictly broadcasts with scope == 'Staff' (staff_only)
-      final staffList = ayAnnouncements.where((a) => a.scope == 'Staff').toList();
-      _staffNotices = staffList.map((a) => StaffNotice(
-        id: a.id,
-        title: a.title,
-        message: a.message,
-        author: a.author,
-        date: a.date,
-        time: a.time,
-        fullDate: a.fullDate,
-        category: '',
-        attachments: a.attachmentObjects,
-      )).toList();
+      // 3. Prune orphan IDs from _readNoticeIds
+      final activeIds = <String>{
+        ..._staffNotices.map((n) => n.id),
+        ..._notices.map((n) => n.id),
+        ..._announcements.map((a) => a.id),
+        ..._classUpdates.map((u) => u.id),
+      };
+      _readNoticeIds.removeWhere((id) => !activeIds.contains(id));
 
-      // 2. School Notices: Strictly official school-wide broadcasts (school)
-      final schoolList = ayAnnouncements.where((a) => a.scope == 'School').toList();
-      _notices = schoolList.map((a) => Notice(
-        id: a.id,
-        source: a.author,
-        title: a.title,
-        body: a.message,
-        date: a.date,
-        time: a.time,
-        fullDate: a.fullDate,
-        attachments: a.attachmentObjects,
-      )).toList();
+      // 4. Save cleaned collections to local cache
+      await _saveCachedNotices();
+      await _saveClassUpdates();
+      await _saveReadNoticeIds();
 
-      // 3. Class Announcements:
-      // Filter out any communications sent via Class Update module (Classwork and Homework)
-      // and only include genuine class notices (BroadcastType.classNotice)
-      final classList = ayAnnouncements.where((a) {
-        // Exclude staff and school wide general notices
-        if (a.scope == 'Staff' || a.scope == 'School') {
-          return false;
-        }
+      // Purge in-memory albums older than active academic year start date
+      _albums.removeWhere((a) {
+        final dt = DateTime.tryParse(a.eventDate);
+        return dt != null && dt.isBefore(threshold);
+      });
+      await _saveCachedAlbums();
 
-        // Must strictly be a class_notice
-        if (a.broadcastType != BroadcastType.classNotice) {
-          return false;
-        }
+      // 5. Automatic cleanup of physical attachments & gallery media on local storage
+      await AttachmentLocalStore.autoCleanupPriorAcademicYear(threshold);
+      await GalleryLocalStore.autoCleanupPriorAcademicYear(threshold);
 
-        // Check if composed by this teacher
-        final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
-            (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+      // 6. Update stored academic year ID
+      await _prefs?.setString(storedYearIdKey, activeYear.id);
+      notifyListeners();
+    } else if (lastKnownYearId == null) {
+      // First boot / baseline setup
+      await _prefs?.setString(storedYearIdKey, activeYear.id);
+      // Run attachment & gallery cleanup on cold boot to ensure clean state
+      await AttachmentLocalStore.autoCleanupPriorAcademicYear(activeYear.startDate);
+      await GalleryLocalStore.autoCleanupPriorAcademicYear(activeYear.startDate);
+    }
+  }
 
-        if (isAuthoredByTeacher) {
-          return true;
-        }
+  /// Unified sync pipeline for all broadcasts, school circulars, staff notices, and class updates.
+  /// Bounded strictly to the active academic year start date when full, or incrementally using delta watermark.
+  Future<void> syncBroadcasts({bool forceFull = false}) async {
+    final teacherId = _teacher?.id ?? 'default';
+    final watermarkKey = 'veyho_last_broadcast_sync_$teacherId';
 
-        // Check if sent by Admin / School targeted to this teacher's class/section
-        if (a.scope == 'Class' || a.scope == 'Direct') {
-          final teacherClasses = <String>[];
-          if (_teacher?.assignedClass != null && _teacher!.assignedClass!.isNotEmpty) {
-            teacherClasses.add(_teacher!.assignedClass!.toLowerCase());
+    // 1. Determine active academic year
+    AcademicYearItem? currentYear;
+    if (_academicYears.isNotEmpty) {
+      currentYear = _academicYears.firstWhere(
+        (y) => y.isCurrent,
+        orElse: () => _academicYears.first,
+      );
+    }
+    final ayStart = currentYear?.startDate ?? DateTime(2026, 4, 1);
+
+    // 2. Determine query parameters: since vs dateFrom
+    String? since;
+    String? dateFrom;
+    final lastSync = _prefs?.getString(watermarkKey);
+
+    if (forceFull || lastSync == null || lastSync.isEmpty) {
+      // Cold start or forced manual pull-to-refresh: strictly bounded to active academic year start date!
+      dateFrom = ayStart.toUtc().toIso8601String();
+    } else {
+      // Incremental delta sync
+      since = lastSync;
+    }
+
+    try {
+      final syncResult = await TeacherDataService.fetchAllBroadcastsUnified(
+        since: since,
+        dateFrom: dateFrom,
+      );
+
+      final liveAnnouncements = syncResult.announcements;
+      final liveUpdates = syncResult.classUpdates;
+      final isDelta = (since != null && since.isNotEmpty);
+
+      // --- Part 1: Process Class Updates ---
+      if (!isDelta) {
+        // Cold start / full refresh:
+        if (liveUpdates.isNotEmpty) {
+          final Map<String, ClassUpdate> dedupContentMap = {};
+          for (final u in liveUpdates) {
+            final fp = _makeClassUpdateFingerprint(u);
+            if (!dedupContentMap.containsKey(fp)) {
+              dedupContentMap[fp] = u;
+              final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+                  (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+              if (isAuthored) {
+                _readNoticeIds.add(u.id);
+              }
+            }
           }
-          if (_teacher?.assignedClasses != null) {
-            for (var c in _teacher!.assignedClasses!) {
-              if (c.isNotEmpty) teacherClasses.add(c.toLowerCase());
+          // Merge any unsynced local pending updates (e.g. temporary CU... ids)
+          for (final u in _classUpdates) {
+            if (u.id.startsWith('CU')) {
+              final fp = _makeClassUpdateFingerprint(u);
+              if (!dedupContentMap.containsKey(fp)) {
+                dedupContentMap[fp] = u;
+              }
+            }
+          }
+          final mergedList = _filterClassUpdates(
+            dedupContentMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList(),
+          );
+          mergedList.sort((a, b) => b.date.compareTo(a.date));
+          _classUpdates = mergedList;
+        }
+      } else {
+        // Delta sync: upsert new/modified class updates
+        if (liveUpdates.isNotEmpty) {
+          final existingMap = <String, ClassUpdate>{};
+          for (final u in _classUpdates) {
+            existingMap[_makeClassUpdateFingerprint(u)] = u;
+          }
+          for (final u in liveUpdates) {
+            final fp = _makeClassUpdateFingerprint(u);
+            existingMap[fp] = u;
+            final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
+                (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
+            if (isAuthored) {
+              _readNoticeIds.add(u.id);
+            }
+          }
+          final mergedList = _filterClassUpdates(
+            existingMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList(),
+          );
+          mergedList.sort((a, b) => b.date.compareTo(a.date));
+          _classUpdates = mergedList;
+        }
+      }
+
+      // --- Part 2: Process Announcements (Staff, School, Class Notices) ---
+      if (!isDelta) {
+        // Cold start / full refresh
+        if (liveAnnouncements.isNotEmpty) {
+          for (final a in liveAnnouncements) {
+            final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+                (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+            if (a.isRead || isAuthoredByTeacher) {
+              _readNoticeIds.add(a.id);
             }
           }
 
-          if (teacherClasses.isEmpty || a.classScope == null || a.classScope!.isEmpty) {
-            return true;
+          final ayAnnouncements = liveAnnouncements
+              .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
+              .toList();
+          ayAnnouncements.sort((a, b) {
+            final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+            final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+            return dtB.compareTo(dtA);
+          });
+
+          // Staff Notices
+          final staffList = ayAnnouncements.where((a) => a.scope == 'Staff').toList();
+          _staffNotices = staffList.map((a) => StaffNotice(
+            id: a.id,
+            title: a.title,
+            message: a.message,
+            author: a.author,
+            date: a.date,
+            time: a.time,
+            fullDate: a.fullDate,
+            category: '',
+            attachments: a.attachmentObjects,
+          )).toList();
+
+          // School Notices
+          final schoolList = ayAnnouncements.where((a) => a.scope == 'School').toList();
+          _notices = schoolList.map((a) => Notice(
+            id: a.id,
+            source: a.author,
+            title: a.title,
+            body: a.message,
+            date: a.date,
+            time: a.time,
+            fullDate: a.fullDate,
+            attachments: a.attachmentObjects,
+          )).toList();
+
+          // Class Announcements
+          _announcements = _filterClassAnnouncements(ayAnnouncements);
+        }
+      } else {
+        // Delta sync: upsert new/updated announcements into in-memory collections
+        if (liveAnnouncements.isNotEmpty) {
+          for (final a in liveAnnouncements) {
+            final isAuthoredByTeacher = (_teacher?.id != null && a.authorId == _teacher!.id) ||
+                (_teacher?.name != null && a.author.toLowerCase() == _teacher!.name.toLowerCase());
+            if (a.isRead || isAuthoredByTeacher) {
+              _readNoticeIds.add(a.id);
+            }
+
+            if (!_isWithinCurrentAcademicYear(a.fullDate ?? a.date)) continue;
+
+            if (a.scope == 'Staff') {
+              final staffItem = StaffNotice(
+                id: a.id,
+                title: a.title,
+                message: a.message,
+                author: a.author,
+                date: a.date,
+                time: a.time,
+                fullDate: a.fullDate,
+                category: '',
+                attachments: a.attachmentObjects,
+              );
+              final idx = _staffNotices.indexWhere((n) => n.id == a.id);
+              if (idx >= 0) {
+                _staffNotices[idx] = staffItem;
+              } else {
+                _staffNotices.insert(0, staffItem);
+              }
+            } else if (a.scope == 'School') {
+              final noticeItem = Notice(
+                id: a.id,
+                source: a.author,
+                title: a.title,
+                body: a.message,
+                date: a.date,
+                time: a.time,
+                fullDate: a.fullDate,
+                attachments: a.attachmentObjects,
+              );
+              final idx = _notices.indexWhere((n) => n.id == a.id);
+              if (idx >= 0) {
+                _notices[idx] = noticeItem;
+              } else {
+                _notices.insert(0, noticeItem);
+              }
+            }
           }
 
-          final targetClassLower = a.classScope!.toLowerCase();
-          final isMatch = teacherClasses.any((tc) =>
-              targetClassLower.contains(tc) ||
-              tc.contains(targetClassLower) ||
-              targetClassLower.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').contains(tc.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) ||
-              tc.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').contains(targetClassLower.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '')) ||
-              targetClassLower == 'class notice');
-          return isMatch;
+          // Also update class announcements for delta
+          final newClassAnnouncements = _filterClassAnnouncements(liveAnnouncements);
+          for (final a in newClassAnnouncements) {
+            final idx = _announcements.indexWhere((n) => n.id == a.id);
+            if (idx >= 0) {
+              _announcements[idx] = a;
+            } else {
+              _announcements.insert(0, a);
+            }
+          }
+
+          _staffNotices.sort((a, b) {
+            final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+            final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+            return dtB.compareTo(dtA);
+          });
+          _notices.sort((a, b) {
+            final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+            final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+            return dtB.compareTo(dtA);
+          });
+          _announcements.sort((a, b) {
+            final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+            final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+            return dtB.compareTo(dtA);
+          });
         }
+      }
 
-        return false;
-      }).toList();
-      _announcements = classList;
-
+      // --- Part 3: Persist Caches and Advance Watermark ---
+      await _saveReadNoticeIds();
       await _saveCachedNotices();
+      await _saveClassUpdates();
+
+      // Record high-water mark timestamp (in UTC ISO8601 format)
+      await _prefs?.setString(watermarkKey, DateTime.now().toUtc().toIso8601String());
       notifyListeners();
     } catch (e) {
-      debugPrint("Error refreshing broadcasts: $e");
+      debugPrint("Error syncing broadcasts: $e");
     }
+  }
+
+  // Refresh and sort all broadcasts by timestamp within Academic Year
+  Future<void> refreshBroadcasts({bool forceFull = false}) async {
+    await syncBroadcasts(forceFull: forceFull);
   }
 
   // Add Class Announcement with live API Sync to Web Admin Sent Items
@@ -1178,9 +1549,8 @@ class AppState extends ChangeNotifier {
   }
 
   // Class Updates Storage Helpers
-  Future<void> refreshClassUpdates() async {
-    await _loadClassUpdates();
-    notifyListeners();
+  Future<void> refreshClassUpdates({bool forceFull = false}) async {
+    await syncBroadcasts(forceFull: forceFull);
   }
 
   void setSelectedAcademicYear(String? yearId) {
@@ -1189,6 +1559,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       fetchAcademicYearsAndHolidays(yearId: yearId);
       refreshEvents(yearId: yearId);
+      fetchGallery(yearId: yearId);
     }
   }
 
@@ -1204,6 +1575,16 @@ class AppState extends ChangeNotifier {
       final years = await TeacherDataService.fetchAcademicYears();
       if (years.isNotEmpty) {
         _academicYears = years;
+        // Save to prefs for offline/startup restore
+        final yearsJson = _academicYears.map((y) => y.toJson()).toList();
+        await _prefs?.setString('veyho_cached_academic_years', json.encode(yearsJson));
+
+        // Check active year and execute cache purge if academic year rollover occurred
+        final current = _academicYears.firstWhere(
+          (y) => y.isCurrent,
+          orElse: () => _academicYears.first,
+        );
+        await _checkAndPurgePriorAcademicYearCache(current);
       }
 
       // Determine target academic year
@@ -1254,32 +1635,56 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadClassUpdates() async {
+  // Refresh Media Gallery Albums (Event Media) from API
+  Future<void> fetchGallery({String? yearId, bool silent = false}) async {
+    try {
+      if (!silent) {
+        _isGalleryLoading = true;
+        notifyListeners();
+      }
+      final targetYearId = yearId ?? _selectedAcademicYearId;
+      final liveAlbums = await TeacherDataService.fetchGallery(academicYearId: targetYearId);
+      _albums = liveAlbums;
+      await _saveCachedAlbums();
+    } catch (e) {
+      debugPrint("Error fetching gallery albums: $e");
+    } finally {
+      _isGalleryLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadCachedAlbums() async {
+    final teacherId = _teacher?.id ?? 'default';
+    final key = 'veyho_teacher_cached_albums_$teacherId';
+    final raw = _prefs?.getString(key);
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final List decoded = json.decode(raw);
+        _albums = decoded
+            .map((item) => Album.fromJson(item as Map<String, dynamic>))
+            .toList();
+      } catch (e) {
+        debugPrint("Error restoring cached teacher albums: $e");
+      }
+    }
+  }
+
+  Future<void> _saveCachedAlbums() async {
+    final teacherId = _teacher?.id ?? 'default';
+    final key = 'veyho_teacher_cached_albums_$teacherId';
+    try {
+      final jsonStr = json.encode(_albums.map((a) => a.toJson()).toList());
+      await _prefs?.setString(key, jsonStr);
+    } catch (e) {
+      debugPrint("Error saving cached teacher albums: $e");
+    }
+  }
+
+  Future<void> _loadCachedClassUpdates() async {
     final teacherId = _teacher?.id ?? 'default';
 
-    String normalizeText(String s) {
-      var cleaned = s.replaceAll(RegExp(r'\bdue(\s+date)?\s*:\s*.*$', caseSensitive: false), '');
-      cleaned = cleaned.replaceAll(RegExp(r'\b(regards|with regards|thanks|thank you)\b.*$', caseSensitive: false, dotAll: true), '');
-      return cleaned.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
-    }
-
-    String makeFingerprint(ClassUpdate u) {
-      var subj = u.subject.trim().toLowerCase();
-      if (subj.isEmpty || subj == 'general') {
-        if (u.title.toLowerCase().contains('science')) {
-          subj = 'science';
-        } else if (u.title.toLowerCase().contains('math')) {
-          subj = 'mathematics';
-        } else if (u.title.toLowerCase().contains('english')) {
-          subj = 'english';
-        }
-      }
-      final norm = normalizeText(u.description);
-      final core = norm.length > 40 ? norm.substring(0, 40) : norm;
-      return "${u.type.trim().toLowerCase()}_${subj}_$core";
-    }
-
-    // 1. Instant local cache restore with deduplication
+    // Instant local cache restore with deduplication
     final stored = _prefs?.getString('veyho_teacher_class_updates_$teacherId');
     if (stored != null && stored.isNotEmpty) {
       try {
@@ -1289,7 +1694,7 @@ class AppState extends ChangeNotifier {
         final Map<String, ClassUpdate> dedupMap = {};
         for (final u in parsed) {
           if (_isWithinCurrentAcademicYear(u.date)) {
-            final fp = makeFingerprint(u);
+            final fp = _makeClassUpdateFingerprint(u);
             if (!dedupMap.containsKey(fp)) {
               dedupMap[fp] = u;
             } else if (dedupMap[fp]!.id.startsWith('CU') && !u.id.startsWith('CU')) {
@@ -1304,46 +1709,10 @@ class AppState extends ChangeNotifier {
         debugPrint("Error loading class updates from storage: $e");
       }
     }
+  }
 
-    // 2. Live network fetch if logged in
-    if (_loggedIn) {
-      try {
-        final liveUpdates = await TeacherDataService.fetchClassUpdates();
-        if (liveUpdates.isNotEmpty) {
-          final Map<String, ClassUpdate> dedupContentMap = {};
-
-          // 2a. Collapse server duplicates down to 1 item per content signature!
-          for (final u in liveUpdates) {
-            final fp = makeFingerprint(u);
-            if (!dedupContentMap.containsKey(fp)) {
-              dedupContentMap[fp] = u;
-              final isAuthored = (_teacher?.id != null && u.teacherId == _teacher!.id) ||
-                  (_teacher?.name != null && u.teacherName.toLowerCase() == _teacher!.name.toLowerCase());
-              if (isAuthored) {
-                _readNoticeIds.add(u.id);
-              }
-            }
-          }
-
-          // 2b. Merge local updates only if not already present on server
-          for (final u in _classUpdates) {
-            final fp = makeFingerprint(u);
-            if (!dedupContentMap.containsKey(fp)) {
-              dedupContentMap[fp] = u;
-            }
-          }
-
-          await _saveReadNoticeIds();
-          final mergedList = dedupContentMap.values.where((u) => _isWithinCurrentAcademicYear(u.date)).toList();
-          mergedList.sort((a, b) => b.date.compareTo(a.date));
-          _classUpdates = mergedList;
-          await _saveClassUpdates();
-          notifyListeners();
-        }
-      } catch (e) {
-        debugPrint("Error fetching live class updates: $e");
-      }
-    }
+  Future<void> _loadClassUpdates() async {
+    await _loadCachedClassUpdates();
   }
 
   Future<void> _saveClassUpdates() async {
@@ -1710,6 +2079,28 @@ class AppState extends ChangeNotifier {
           live.messages.addAll(existing.messages);
         }
       }
+
+      // Preserve any active empty conversation currently open in ParentChatScreen so polling
+      // never wipes an open draft before the teacher sends the first message.
+      final activeThreadId = NotificationNavigationService.activeChatThreadId;
+      final activeParentId = NotificationNavigationService.activeChatParentId;
+      for (final c in _parentConversations) {
+        final isActiveOpen = (activeThreadId != null &&
+                activeThreadId.isNotEmpty &&
+                (c.threadId == activeThreadId || c.parentId == activeThreadId)) ||
+            (activeParentId != null &&
+                activeParentId.isNotEmpty &&
+                (c.parentId == activeParentId || c.threadId == activeParentId));
+        if (!isActiveOpen) continue;
+
+        final alreadyPresent = validThreads.any((v) =>
+            (v.threadId != null && c.threadId != null && v.threadId == c.threadId) ||
+            (v.parentId.isNotEmpty && v.parentId == c.parentId));
+        if (!alreadyPresent) {
+          validThreads.insert(0, c);
+        }
+      }
+
       _parentConversations = validThreads;
       await _saveParentConversations();
       notifyListeners();
@@ -1744,19 +2135,37 @@ class AppState extends ChangeNotifier {
       notifyListeners();
 
       final realThreadId = _parentConversations[idx].threadId ?? _parentConversations[idx].parentId;
+      final studentIdForDraft = _parentConversations[idx].studentId;
       if (realThreadId.isNotEmpty && sender == 'teacher') {
-        TeacherDataService.sendTeacherMessage(realThreadId, text).then((res) {
+        Future<void>(() async {
+          String effectiveThreadId = realThreadId;
+          if (effectiveThreadId.startsWith('P_') && studentIdForDraft != null && studentIdForDraft.isNotEmpty) {
+            final resolved = await TeacherDataService.startOrGetTeacherChatThread(studentIdForDraft);
+            if (resolved != null && resolved.threadId != null && resolved.threadId!.isNotEmpty) {
+              effectiveThreadId = resolved.threadId!;
+              final curIdx = _parentConversations.indexWhere(
+                  (c) => c.parentId == parentId || c.threadId == parentId);
+              if (curIdx != -1) {
+                _parentConversations[curIdx].threadId = effectiveThreadId;
+              }
+            }
+          }
+          final res = await TeacherDataService.sendTeacherMessage(effectiveThreadId, text);
           if (res != null && res['id'] != null) {
-            final mIdx = _parentConversations[idx].messages.indexWhere((m) => m.id == tempId);
-            if (mIdx != -1) {
-              _parentConversations[idx].messages[mIdx] = ParentMessage(
-                id: res['id'].toString(),
-                text: text,
-                sender: 'teacher',
-                timestamp: res['createdAt']?.toString() ?? now.toIso8601String(),
-                status: 'sent',
-              );
-              notifyListeners();
+            final curIdx = _parentConversations.indexWhere(
+                (c) => c.threadId == effectiveThreadId || c.parentId == parentId || c.threadId == parentId);
+            if (curIdx != -1) {
+              final mIdx = _parentConversations[curIdx].messages.indexWhere((m) => m.id == tempId);
+              if (mIdx != -1) {
+                _parentConversations[curIdx].messages[mIdx] = ParentMessage(
+                  id: res['id'].toString(),
+                  text: text,
+                  sender: 'teacher',
+                  timestamp: res['createdAt']?.toString() ?? now.toIso8601String(),
+                  status: 'sent',
+                );
+                notifyListeners();
+              }
             }
           }
         }).catchError((e) {
@@ -1873,6 +2282,47 @@ class AppState extends ChangeNotifier {
       }
       TeacherDataService.deleteTeacherMessage(messageId).catchError((_) => false);
     }
+  }
+
+  Future<ParentConversation> openOrCreateParentChat(Student student) async {
+    final existingIdx = _parentConversations.indexWhere(
+      (c) => (c.studentId != null && c.studentId == student.id) || c.studentName == student.name,
+    );
+    if (existingIdx != -1) {
+      return _parentConversations[existingIdx];
+    }
+
+    final liveThread = await TeacherDataService.startOrGetTeacherChatThread(student.id);
+    if (liveThread != null) {
+      final idx = _parentConversations.indexWhere(
+        (c) => (liveThread.threadId != null && c.threadId == liveThread.threadId) ||
+            (c.studentId != null && c.studentId == student.id),
+      );
+      if (idx != -1) {
+        return _parentConversations[idx];
+      }
+      _parentConversations.insert(0, liveThread);
+      notifyListeners();
+      return liveThread;
+    }
+
+    final cleanParent = student.parentName
+        .replaceFirst(RegExp(r'^(Mr\.|Mrs\.|Ms\.|Mr|Mrs|Ms)\s*', caseSensitive: false), '')
+        .trim();
+    final fallbackConv = ParentConversation(
+      parentId: 'P_${student.id}',
+      parentName: cleanParent.isNotEmpty ? cleanParent : 'Parent',
+      studentId: student.id,
+      studentName: student.name,
+      studentClass: student.studentClass,
+      mobile: student.parentMobile,
+      lastMessage: '',
+      messages: [],
+      timeLabel: 'Just now',
+    );
+    _parentConversations.insert(0, fallbackConv);
+    notifyListeners();
+    return fallbackConv;
   }
 
   void startNewConversation(ParentConversation newConv) {

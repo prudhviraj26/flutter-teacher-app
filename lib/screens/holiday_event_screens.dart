@@ -7,6 +7,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../services/gallery_local_store.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // =============================================================================
 // 1. HOLIDAY THEMES & HELPER
@@ -2099,13 +2101,64 @@ class EventDetailScreen extends StatelessWidget {
 // 5. GALLERY SCREEN & ALBUM DETAIL SCREEN (Preserved)
 // =============================================================================
 
-class GalleryScreen extends StatelessWidget {
+class GalleryScreen extends StatefulWidget {
   const GalleryScreen({super.key});
+
+  @override
+  State<GalleryScreen> createState() => _GalleryScreenState();
+}
+
+class _GalleryScreenState extends State<GalleryScreen> {
+  String _selectedCategory = 'ALL';
+
+  final List<String> _categories = [
+    'ALL',
+    'SPORTS',
+    'CULTURAL',
+    'ACADEMIC',
+    'CELEBRATION',
+  ];
+
+  Color _getCategoryBg(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'sports':
+        return const Color(0xFFEFF6FF);
+      case 'cultural':
+        return const Color(0xFFFAF5FF);
+      case 'academic':
+        return const Color(0xFFF0FDF4);
+      case 'celebration':
+        return const Color(0xFFFFF7ED);
+      default:
+        return const Color(0xFFF1F5F9);
+    }
+  }
+
+  Color _getCategoryText(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'sports':
+        return const Color(0xFF1D4ED8);
+      case 'cultural':
+        return const Color(0xFF7E22CE);
+      case 'academic':
+        return const Color(0xFF15803D);
+      case 'celebration':
+        return const Color(0xFFC2410C);
+      default:
+        return const Color(0xFF475569);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final albums = appState.albums;
+    final allAlbums = appState.albums;
+
+    final filteredAlbums = _selectedCategory == 'ALL'
+        ? allAlbums
+        : allAlbums
+            .where((a) => a.category.toUpperCase() == _selectedCategory)
+            .toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -2126,135 +2179,380 @@ class GalleryScreen extends StatelessWidget {
           child: Container(color: AppColors.border, height: 1),
         ),
       ),
-      body: albums.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryTeal.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(LucideIcons.image, size: 28, color: AppColors.primaryTeal),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'No Photo Albums',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textMain,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'School event photos and albums will appear here.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-                  ),
-                ],
-              ),
-            )
-          : GridView.builder(
-              padding: const EdgeInsets.all(20),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 0.95,
-              ),
-              itemCount: albums.length,
-              itemBuilder: (context, index) {
-                final a = albums[index];
-
-                return Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0x0A000000), blurRadius: 6, offset: Offset(0, 3))
-                    ],
-                  ),
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => AlbumDetailScreen(album: a),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryTeal.withValues(alpha: 0.1),
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(20),
-                                topRight: Radius.circular(20),
-                              ),
-                              image: DecorationImage(
-                                image: NetworkImage(a.coverPhoto),
-                                fit: BoxFit.cover,
-                              ),
+      body: RefreshIndicator(
+        color: AppColors.primaryTeal,
+        onRefresh: () => appState.fetchGallery(),
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // Category Filter Bar
+            SliverToBoxAdapter(
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, idx) {
+                      final cat = _categories[idx];
+                      final isSelected = _selectedCategory == cat;
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedCategory = cat),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.primaryTeal : Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: isSelected ? AppColors.primaryTeal : const Color(0xFFE2E8F0),
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            cat,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : const Color(0xFF64748B),
                             ),
                           ),
                         ),
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                a.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Color(0xFF1F2937),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${a.photoCount} photos',
-                                style: const TextStyle(fontSize: 10, color: Colors.grey),
-                              ),
-                            ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+            if (appState.isGalleryLoading && allAlbums.isEmpty)
+              const SliverFillRemaining(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primaryTeal),
+                ),
+              )
+            else if (filteredAlbums.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryTeal.withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
                           ),
+                          child: const Icon(LucideIcons.image, size: 28, color: AppColors.primaryTeal),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'No Photo Albums',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMain,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _selectedCategory == 'ALL'
+                              ? 'School event photos and albums will appear here.'
+                              : 'No albums found under $_selectedCategory category.',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
                         ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final album = filteredAlbums[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x0A000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AlbumDetailScreen(album: album),
+                              ),
+                            );
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Cover Photo Stack
+                              Stack(
+                                children: [
+                                  SizedBox(
+                                    height: 180,
+                                    width: double.infinity,
+                                    child: album.coverPhoto.isNotEmpty
+                                        ? VeyhoCachedImage(
+                                            mediaId: album.coverPhotoId.isNotEmpty
+                                                ? album.coverPhotoId
+                                                : (album.photos.isNotEmpty ? album.photos.first.id : '${album.id}_cover'),
+                                            url: album.coverPhoto,
+                                            eventDate: album.eventDate,
+                                            isThumbnail: true,
+                                            height: 180,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(
+                                            height: 180,
+                                            color: const Color(0xFFF1F5F9),
+                                            child: const Icon(
+                                              LucideIcons.image,
+                                              size: 38,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                  ),
+                                  // Gradient Overlay
+                                  const Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Color(0x59000000),
+                                            Colors.transparent,
+                                            Color(0xBF000000),
+                                          ],
+                                          stops: [0.0, 0.45, 1.0],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Category Pill
+                                  Positioned(
+                                    top: 12,
+                                    left: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: _getCategoryBg(album.category),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        album.category.toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          color: _getCategoryText(album.category),
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  // Photo Count Badge
+                                  Positioned(
+                                    top: 12,
+                                    right: 12,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xA6000000),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(LucideIcons.camera, size: 12, color: Colors.white),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${album.photoCount}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  // Event Title & Date at Bottom of Cover
+                                  Positioned(
+                                    bottom: 12,
+                                    left: 14,
+                                    right: 14,
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (album.eventDate.isNotEmpty)
+                                          Row(
+                                            children: [
+                                              const Icon(LucideIcons.calendar, size: 12, color: Color(0xFFE2E8F0)),
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                album.eventDate,
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFFE2E8F0),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          album.title,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.white,
+                                            shadows: [
+                                              Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1)),
+                                            ],
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              // Sub-bar
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    if (album.location.isNotEmpty)
+                                      Expanded(
+                                        child: Row(
+                                          children: [
+                                            const Icon(LucideIcons.mapPin, size: 13, color: Color(0xFF64748B)),
+                                            const SizedBox(width: 5),
+                                            Expanded(
+                                              child: Text(
+                                                album.location,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFF64748B),
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
+                                      const Text(
+                                        'School Event Album',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF64748B),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    const Row(
+                                      children: [
+                                        Text(
+                                          'View Album',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primaryTeal,
+                                          ),
+                                        ),
+                                        SizedBox(width: 4),
+                                        Icon(LucideIcons.arrowRight, size: 14, color: AppColors.primaryTeal),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: filteredAlbums.length,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
 
 class AlbumDetailScreen extends StatelessWidget {
-  final Album album;
+  final Album? album;
 
-  const AlbumDetailScreen({
-    super.key,
-    required this.album,
-  });
+  const AlbumDetailScreen({super.key, this.album});
 
   @override
   Widget build(BuildContext context) {
+    final effectiveAlbum = album ?? (ModalRoute.of(context)!.settings.arguments as Album?);
+
+    if (effectiveAlbum == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Event Gallery')),
+        body: const Center(child: Text('Album not found')),
+      );
+    }
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          album.title,
-          style: const TextStyle(color: AppColors.textMain, fontWeight: FontWeight.bold),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              effectiveAlbum.title,
+              style: const TextStyle(
+                color: AppColors.textMain,
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              '${effectiveAlbum.photos.length} items',
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 11.5,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -2268,43 +2566,310 @@ class AlbumDetailScreen extends StatelessWidget {
           child: Container(color: AppColors.border, height: 1),
         ),
       ),
-      body: album.photos.isEmpty
-          ? const Center(
-              child: Text(
-                'No photos in this album yet.',
-                style: TextStyle(color: AppColors.textMuted),
+      body: effectiveAlbum.photos.isEmpty
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(LucideIcons.camera, size: 28, color: Color(0xFF94A3B8)),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No Photos In This Album',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'School event photos and highlights will appear here shortly.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             )
           : GridView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(3),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
+                crossAxisSpacing: 3,
+                mainAxisSpacing: 3,
               ),
-              itemCount: album.photos.length,
+              itemCount: effectiveAlbum.photos.length,
               itemBuilder: (context, index) {
-                final p = album.photos[index];
-
+                final photo = effectiveAlbum.photos[index];
                 return GestureDetector(
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Viewing image ${p.id} of ${album.title}')),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FullScreenImageViewer(
+                          photos: effectiveAlbum.photos,
+                          initialIndex: index,
+                          albumTitle: effectiveAlbum.title,
+                          eventDate: effectiveAlbum.eventDate,
+                        ),
+                      ),
                     );
                   },
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(10),
-                      image: DecorationImage(
-                        image: NetworkImage(p.url),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      VeyhoCachedImage(
+                        mediaId: photo.id,
+                        url: photo.thumbnailUrl,
+                        eventDate: effectiveAlbum.eventDate,
+                        isThumbnail: true,
                         fit: BoxFit.cover,
                       ),
-                    ),
+                      if (photo.isVideo)
+                        Center(
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 );
               },
             ),
+    );
+  }
+}
+
+class FullScreenImageViewer extends StatefulWidget {
+  final List<Photo> photos;
+  final int initialIndex;
+  final String albumTitle;
+  final String? eventDate;
+
+  const FullScreenImageViewer({
+    super.key,
+    required this.photos,
+    required this.initialIndex,
+    required this.albumTitle,
+    this.eventDate,
+  });
+
+  @override
+  State<FullScreenImageViewer> createState() => _FullScreenImageViewerState();
+}
+
+class _FullScreenImageViewerState extends State<FullScreenImageViewer> {
+  late PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          // Pinch-to-zoom interactive PageView
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.photos.length,
+            onPageChanged: (idx) {
+              setState(() => _currentIndex = idx);
+            },
+            itemBuilder: (context, index) {
+              final photo = widget.photos[index];
+              if (photo.isVideo) {
+                return Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      VeyhoCachedImage(
+                        mediaId: photo.id,
+                        url: photo.thumbnailUrl.isNotEmpty ? photo.thumbnailUrl : photo.url,
+                        eventDate: widget.eventDate,
+                        isThumbnail: true,
+                        fit: BoxFit.contain,
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          final uri = Uri.parse(photo.url);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: const Color(0xA6000000),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white70, width: 2),
+                          ),
+                          child: const Icon(
+                            Icons.play_arrow_rounded,
+                            color: Colors.white,
+                            size: 52,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 30,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final uri = Uri.parse(photo.url);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(LucideIcons.play, size: 16),
+                          label: const Text('Play Video', style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primaryTeal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                            elevation: 4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return InteractiveViewer(
+                minScale: 1.0,
+                maxScale: 4.0,
+                child: Center(
+                  child: VeyhoCachedImage(
+                    mediaId: photo.id,
+                    url: photo.url,
+                    eventDate: widget.eventDate,
+                    isThumbnail: false,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Top Header Bar
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 8,
+                bottom: 12,
+                left: 12,
+                right: 16,
+              ),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black87, Colors.transparent],
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.arrowLeft, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.albumTitle,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          '${_currentIndex + 1} of ${widget.photos.length}',
+                          style: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom Caption Bar
+          if (widget.photos[_currentIndex].caption.isNotEmpty)
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).padding.bottom + 16,
+                  top: 16,
+                  left: 20,
+                  right: 20,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black87, Colors.transparent],
+                  ),
+                ),
+                child: Text(
+                  widget.photos[_currentIndex].caption,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

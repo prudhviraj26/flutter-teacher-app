@@ -53,7 +53,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
     if (_isRefreshing) return;
     setState(() => _isRefreshing = true);
     try {
-      await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+      await Provider.of<AppState>(context, listen: false).refreshBroadcasts(forceFull: true);
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
@@ -549,7 +549,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
           // Content
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => appState.refreshBroadcasts(),
+              onRefresh: () => appState.refreshBroadcasts(forceFull: true),
               color: AppColors.secondary,
               child: ListView(
                 controller: _scrollController,
@@ -821,61 +821,22 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                   const SizedBox(height: 16),
                 ],
                 
-                // Empty state
+                // Empty state (subtle borderless indicator; bottom FAB handles creation)
                 if (list.isEmpty && !_showPostForm) ...[
                   Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFFE5E7EB)),
-                    ),
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.symmetric(vertical: 48),
+                    alignment: Alignment.center,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary.withValues(alpha: 0.1),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.campaign_outlined, size: 32, color: AppColors.secondary),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
+                        Icon(Icons.campaign_outlined, size: 48, color: Colors.grey.shade400),
+                        const SizedBox(height: 12),
+                        Text(
                           'No Class Announcements Yet',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Tap the + button at the top to publish an announcement, activity notice, or competition details to ${teacher?.assignedClass ?? "your class"}.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                             color: Colors.grey.shade600,
-                            height: 1.4,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _showPostForm = true;
-                            });
-                          },
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Post Announcement', style: TextStyle(fontWeight: FontWeight.bold)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.secondary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                           ),
                         ),
                       ],

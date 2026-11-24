@@ -3,6 +3,16 @@ import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import '../models/models.dart';
 
+class BroadcastSyncResult {
+  final List<Announcement> announcements;
+  final List<ClassUpdate> classUpdates;
+
+  BroadcastSyncResult({
+    required this.announcements,
+    required this.classUpdates,
+  });
+}
+
 class TeacherDataService {
   // Fetch Students for current school / section
   static Future<List<Student>> fetchStudents({String? sectionId}) async {
@@ -74,10 +84,22 @@ class TeacherDataService {
     }
   }
 
-  // Fetch School Broadcasts / Announcements
-  static Future<List<Announcement>> fetchBroadcasts({int pageSize = 500}) async {
+  // Unified Broadcast & Class Update Fetch (Single network call, dual mapping)
+  static Future<BroadcastSyncResult> fetchAllBroadcastsUnified({
+    String? since,
+    String? dateFrom,
+    int? pageSize,
+  }) async {
     try {
-      final response = await ApiService.get('/communication/broadcasts?pageSize=$pageSize');
+      final queryParams = <String, String>{
+        if (since != null && since.isNotEmpty) 'since': since,
+        if (dateFrom != null && dateFrom.isNotEmpty) 'dateFrom': dateFrom,
+        if (pageSize != null) 'pageSize': pageSize.toString(),
+      };
+      final queryString = queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+      final path = queryString.isNotEmpty ? '/communication/broadcasts?$queryString' : '/communication/broadcasts';
+      final response = await ApiService.get(path);
+
       List? list;
       if (response is List) {
         list = response;
@@ -90,12 +112,48 @@ class TeacherDataService {
       }
 
       if (list != null) {
-        return list.map((item) => _mapApiBroadcastToAnnouncement(item as Map<String, dynamic>)).toList();
+        final announcements = <Announcement>[];
+        final classUpdates = <ClassUpdate>[];
+        for (final item in list) {
+          if (item is Map<String, dynamic>) {
+            try {
+              announcements.add(_mapApiBroadcastToAnnouncement(item));
+            } catch (aErr) {
+              debugPrint('Error mapping announcement item: $aErr');
+            }
+            try {
+              final bType = (item['broadcastType'] ?? item['broadcast_type'] ?? '').toString().toLowerCase();
+              if (bType == 'homework' || bType == 'classwork') {
+                classUpdates.add(_mapApiBroadcastToClassUpdate(item));
+              }
+            } catch (cuErr) {
+              debugPrint('Error mapping class update item: $cuErr');
+            }
+          }
+        }
+        return BroadcastSyncResult(
+          announcements: announcements,
+          classUpdates: classUpdates,
+        );
       }
     } catch (e) {
-      debugPrint('TeacherDataService.fetchBroadcasts error: $e');
+      debugPrint('TeacherDataService.fetchAllBroadcastsUnified error: $e');
     }
-    return [];
+    return BroadcastSyncResult(announcements: [], classUpdates: []);
+  }
+
+  // Fetch School Broadcasts / Announcements (uses unified pipeline)
+  static Future<List<Announcement>> fetchBroadcasts({
+    String? since,
+    String? dateFrom,
+    int? pageSize,
+  }) async {
+    final result = await fetchAllBroadcastsUnified(
+      since: since,
+      dateFrom: dateFrom,
+      pageSize: pageSize,
+    );
+    return result.announcements;
   }
 
   // Upload Attachment via Multipart
@@ -114,6 +172,26 @@ class TeacherDataService {
       }
     } catch (e) {
       debugPrint('TeacherDataService.uploadAttachment error: $e');
+    }
+    return null;
+  }
+
+  // Upload Profile Photo via Multipart
+  static Future<Map<String, dynamic>?> uploadProfilePhoto(
+    String teacherId,
+    File file,
+  ) async {
+    try {
+      final res = await ApiService.uploadMultipart(
+        '/staff/$teacherId/photo',
+        file: file,
+        fieldName: 'photo',
+      );
+      if (res is Map<String, dynamic>) {
+        return res;
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.uploadProfilePhoto error: $e');
     }
     return null;
   }
@@ -476,6 +554,21 @@ class TeacherDataService {
     return null;
   }
 
+  /// Extracts the first non-empty class/section target label from an API broadcast JSON map.
+  static String? _extractClassTarget(Map<String, dynamic> json) {
+    final candidates = <String?>[
+      json['targetSectionName']?.toString(),
+      json['targetClassName']?.toString(),
+      json['targetClass']?.toString(),
+      if (json['targetClassNames'] is List && (json['targetClassNames'] as List).isNotEmpty)
+        (json['targetClassNames'] as List).map((e) => e.toString()).join(', '),
+    ];
+    for (final c in candidates) {
+      if (c != null && c.trim().isNotEmpty) return c.trim();
+    }
+    return null;
+  }
+
   // Mapper helper: API Broadcast JSON -> App Announcement model
   static Announcement _mapApiBroadcastToAnnouncement(Map<String, dynamic> json) {
     final String id = json['id']?.toString() ?? 'A-UNK';
@@ -508,9 +601,7 @@ class TeacherDataService {
       }
     }
 
-    final String? classScope = json['targetClassName'] ??
-        json['targetClass'] ??
-        json['targetSectionName'] ??
+    final String? classScope = _extractClassTarget(json) ??
         (targetType == 'class' || targetType == 'section' ? 'Class Notice' : null);
 
     final List<NoticeAttachment> attachmentObjects = [];
@@ -555,6 +646,21 @@ class TeacherDataService {
   }
 
   // --- Teacher Chat Methods ---
+
+  static Future<ParentConversation?> startOrGetTeacherChatThread(String studentId) async {
+    try {
+      final response = await ApiService.post('/communication/chat/teacher/threads', {
+        'studentId': studentId,
+      });
+      if (response is Map<String, dynamic>) {
+        return ParentConversation.fromJson(response);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Error starting teacher chat thread: $e');
+      return null;
+    }
+  }
 
   static Future<List<ParentConversation>> fetchTeacherChatThreads() async {
     try {
@@ -618,36 +724,18 @@ class TeacherDataService {
     }
   }
 
-  // Fetch Class Updates (Homework & Classwork) from Backend API
-  static Future<List<ClassUpdate>> fetchClassUpdates() async {
-    try {
-      final response = await ApiService.get('/communication/broadcasts?pageSize=500');
-      List? list;
-      if (response is List) {
-        list = response;
-      } else if (response is Map<String, dynamic>) {
-        if (response['items'] is List) {
-          list = response['items'];
-        } else if (response['data'] is List) {
-          list = response['data'];
-        }
-      }
-      if (list != null) {
-        final updates = <ClassUpdate>[];
-        for (final item in list) {
-          if (item is Map<String, dynamic>) {
-            final bType = (item['broadcastType'] ?? item['broadcast_type'] ?? '').toString().toLowerCase();
-            if (bType == 'homework' || bType == 'classwork') {
-              updates.add(_mapApiBroadcastToClassUpdate(item));
-            }
-          }
-        }
-        return updates;
-      }
-    } catch (e) {
-      debugPrint('TeacherDataService.fetchClassUpdates error: $e');
-    }
-    return [];
+  // Fetch Class Updates (Homework & Classwork) from Backend API (uses unified pipeline)
+  static Future<List<ClassUpdate>> fetchClassUpdates({
+    String? since,
+    String? dateFrom,
+    int? pageSize,
+  }) async {
+    final result = await fetchAllBroadcastsUnified(
+      since: since,
+      dateFrom: dateFrom,
+      pageSize: pageSize,
+    );
+    return result.classUpdates;
   }
 
   static ClassUpdate _mapApiBroadcastToClassUpdate(Map<String, dynamic> json) {
@@ -667,7 +755,10 @@ class TeacherDataService {
     String description = json['body'] ?? json['message'] ?? '';
     description = description.replaceAll(RegExp(r'\bdue(\s+date)?\s*:\s*.*$', caseSensitive: false), '').trim();
     final String teacherName = json['senderName'] ?? json['author'] ?? 'Teacher';
-    final String teacherId = json['senderStaffId'] ?? json['authorId'] ?? '';
+    final String teacherId = json['composedByStaffId']?.toString() ??
+        json['senderStaffId']?.toString() ??
+        json['authorId']?.toString() ??
+        '';
 
     final now = DateTime.now();
     final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
@@ -691,7 +782,7 @@ class TeacherDataService {
       }
     }
 
-    final String classTarget = json['targetSectionName'] ?? json['targetClassName'] ?? 'All';
+    final String classTarget = _extractClassTarget(json) ?? 'All';
 
     return ClassUpdate(
       id: id,
@@ -726,5 +817,35 @@ class TeacherDataService {
       parentName: studentFallback?.parentName,
       parentMobile: studentFallback?.parentMobile,
     );
+  }
+
+  // Fetch Media Gallery Albums (Event Media)
+  static Future<List<Album>> fetchGallery({String? academicYearId}) async {
+    try {
+      final queryParam = (academicYearId != null && academicYearId.isNotEmpty)
+          ? '?academicYearId=$academicYearId'
+          : '';
+      final response = await ApiService.get('/communication/gallery$queryParam');
+
+      List? list;
+      if (response is List) {
+        list = response;
+      } else if (response is Map<String, dynamic>) {
+        if (response['items'] is List) {
+          list = response['items'];
+        } else if (response['data'] is List) {
+          list = response['data'];
+        }
+      }
+
+      if (list != null) {
+        return list
+            .map((item) => Album.fromJson(item as Map<String, dynamic>))
+            .toList();
+      }
+    } catch (e) {
+      debugPrint('TeacherDataService.fetchGallery error: $e');
+    }
+    return [];
   }
 }

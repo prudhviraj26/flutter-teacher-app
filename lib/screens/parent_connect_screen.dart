@@ -178,35 +178,22 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                                         ),
                                       ],
                                     ),
-                                    onTap: () {
-                                      Navigator.pop(context);
-                                      // Trigger start new chat
-                                      final existing = appState.parentConversations
-                                          .where((c) => c.studentName == student.name);
-                                      if (existing.isNotEmpty) {
-                                        Navigator.pushNamed(context, '/parent-connect/chat/${existing.first.parentId}').then((_) {
-                                          appState.fetchParentConversations();
-                                        });
-                                        return;
+                                    onTap: () async {
+                                      final navigator = Navigator.of(context);
+                                      final messenger = ScaffoldMessenger.of(context);
+                                      navigator.pop();
+                                      final conv = await appState.openOrCreateParentChat(student);
+                                      final targetId = (conv.threadId != null && conv.threadId!.isNotEmpty)
+                                          ? conv.threadId!
+                                          : conv.parentId;
+                                      NotificationNavigationService.activeChatParentId = conv.parentId;
+                                      NotificationNavigationService.activeChatThreadId = conv.threadId ?? conv.parentId;
+                                      if (conv.messages.isEmpty) {
+                                        messenger.showSnackBar(
+                                          SnackBar(content: Text('Chat opened with parent of ${student.name}')),
+                                        );
                                       }
-                                      
-                                      final newParentId = 'P_${DateTime.now().millisecondsSinceEpoch}';
-                                      final newConv = ParentConversation(
-                                        parentId: newParentId,
-                                        parentName: _cleanParentName(student.parentName),
-                                        studentName: student.name,
-                                        studentClass: student.studentClass,
-                                        mobile: student.parentMobile,
-                                        lastMessage: 'Conversation started',
-                                        messages: [],
-                                        timeLabel: 'Just now',
-                                      );
-                                      appState.startNewConversation(newConv);
-                                      
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Chat started with parent of ${student.name}')),
-                                      );
-                                      Navigator.pushNamed(context, '/parent-connect/chat/$newParentId').then((_) {
+                                      navigator.pushNamed('/parent-connect/chat/$targetId').then((_) {
                                         appState.fetchParentConversations();
                                       });
                                     },
@@ -814,8 +801,9 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Track active chat to suppress duplicate foreground push notification banner
+    // Track active chat synchronously so polling timers do not evict newly started empty threads
     NotificationNavigationService.activeChatParentId = widget.parentId;
+    NotificationNavigationService.activeChatThreadId = widget.parentId;
 
     // Track scroll position to show/hide "scroll to latest" button
     _scrollController.addListener(_onScrollChanged);
@@ -831,6 +819,7 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
           break;
         }
       }
+      NotificationNavigationService.activeChatParentId = conv?.parentId ?? widget.parentId;
       NotificationNavigationService.activeChatThreadId = conv?.threadId ?? widget.parentId;
       appState.markChatAsRead(widget.parentId);
       appState.fetchTeacherThreadMessages(widget.parentId);
@@ -1069,6 +1058,11 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
 
     if (conv.parentId.isEmpty && conv.studentName.isEmpty) {
       return Scaffold(
+        appBar: AppBar(
+          backgroundColor: AppColors.secondary,
+          foregroundColor: Colors.white,
+          title: const Text('Parent Chat'),
+        ),
         body: Center(
           child: Text(appState.translate('noData')),
         ),
@@ -1161,7 +1155,41 @@ class _ParentChatScreenState extends State<ParentChatScreen> with WidgetsBinding
                 GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => FocusScope.of(context).unfocus(),
-                  child: ListView.builder(
+                  child: conv.messages.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 48,
+                                  color: Colors.grey.shade300,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No messages yet',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Send a message below to start chatting with ${_cleanParentName(conv.parentName)}.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.builder(
                     controller: _scrollController,
                     reverse: true,
                     keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

@@ -1,12 +1,100 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../models/models.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/full_screen_photo_viewer.dart';
+import '../services/mobile_compressor.dart';
+import '../services/teacher_data_service.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isUploading = false;
+  final ImagePicker _imagePicker = ImagePicker();
+
+  Future<void> _handlePhotoUpload(AppState appState, Teacher teacher) async {
+    try {
+      final XFile? picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 90,
+      );
+
+      if (picked == null) return; // User cancelled
+
+      final ext = picked.path.split('.').last.toLowerCase();
+      const allowed = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
+      if (!allowed.contains(ext)) {
+        throw Exception('invalidImageFormat');
+      }
+
+      if (mounted) {
+        setState(() => _isUploading = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(appState.translate('updatingPhoto')),
+            duration: const Duration(seconds: 2),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+
+      final originalFile = File(picked.path);
+
+      // 1. Client-side compression
+      final compResult = await MobileCompressor.compressAttachment(originalFile);
+      final finalFile = compResult.file;
+
+      // 2. Instant local storage update (0 egress, 0 lag)
+      final bytes = await finalFile.readAsBytes();
+      final base64String = base64Encode(bytes);
+      await appState.updateProfilePic(base64String);
+
+      // 3. Upload to backend & storage account
+      final uploadRes = await TeacherDataService.uploadProfilePhoto(teacher.id, finalFile);
+
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              uploadRes != null
+                  ? appState.translate('photoUpdated')
+                  : appState.translate('photoSavedLocally'),
+            ),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+        final isFormatErr = e.toString().contains('invalidImageFormat');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isFormatErr
+                  ? appState.translate('invalidImageFormat')
+                  : '${appState.translate('photoUpdateFailed')}: $e',
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
 
   void _handleLogout(BuildContext context, AppState appState) {
     showDialog(
@@ -187,21 +275,86 @@ class ProfileScreen extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 32,
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            backgroundImage: appState.profilePic != null
-                                ? MemoryImage(const Base64Decoder().convert(appState.profilePic!))
-                                : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
-                                    ? NetworkImage(teacher.photoUrl!)
-                                    : null) as ImageProvider?,
-                            child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
-                                ? Text(
-                                    teacher.name.isNotEmpty ? teacher.name[0] : 'T',
-                                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                                  )
-                                : null,
+                          // Teacher Profile Photo with Pinch-to-Zoom & Pencil Edit Badge
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              // Avatar (Tappable -> Opens FullScreenPhotoViewer)
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => FullScreenPhotoViewer(
+                                        title: teacher.name,
+                                        subtitle: '$designationText$assignedClassText',
+                                        base64Image: appState.profilePic,
+                                        photoUrl: teacher.photoUrl,
+                                        onChangePhoto: () => _handlePhotoUpload(appState, teacher),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: CircleAvatar(
+                                  radius: 32,
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  backgroundImage: appState.profilePic != null
+                                      ? MemoryImage(const Base64Decoder().convert(appState.profilePic!))
+                                      : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                                          ? NetworkImage(teacher.photoUrl!)
+                                          : null) as ImageProvider?,
+                                  child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
+                                      ? Text(
+                                          teacher.name.isNotEmpty ? teacher.name[0] : 'T',
+                                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                                        )
+                                      : null,
+                                ),
+                              ),
+
+                              // Floating Pencil Edit Badge (Tappable -> Opens Gallery directly)
+                              Positioned(
+                                bottom: -2,
+                                right: -2,
+                                child: GestureDetector(
+                                  onTap: _isUploading
+                                      ? null
+                                      : () => _handlePhotoUpload(appState, teacher),
+                                  child: Container(
+                                    width: 26,
+                                    height: 26,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppColors.primary,
+                                      border: Border.all(color: Colors.white, width: 2),
+                                      boxShadow: const [
+                                        BoxShadow(
+                                          color: Colors.black26,
+                                          blurRadius: 4,
+                                          offset: Offset(0, 1),
+                                        ),
+                                      ],
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: _isUploading
+                                        ? const SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.edit,
+                                            size: 13,
+                                            color: Colors.white,
+                                          ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(width: 16),
                           Expanded(

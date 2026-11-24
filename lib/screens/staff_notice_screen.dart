@@ -45,7 +45,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
 
   Future<void> _fetchData() async {
     if (mounted) setState(() => _isFetching = true);
-    await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    await Provider.of<AppState>(context, listen: false).refreshBroadcasts(forceFull: true);
     if (mounted) setState(() => _isFetching = false);
   }
 
@@ -256,7 +256,7 @@ class _StaffNoticeScreenState extends State<StaffNoticeScreen> {
           // Content
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => appState.refreshBroadcasts(),
+              onRefresh: () => appState.refreshBroadcasts(forceFull: true),
               color: AppColors.secondary,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),

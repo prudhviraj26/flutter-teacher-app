@@ -1657,9 +1657,45 @@ class _HelpFAQScreenState extends State<HelpFAQScreen> {
                     );
                   }),
 
+                // Need More Help / Support Card (ONLY visible when user clicks "Show More FAQs" and expands full list)
+                if (_showAll) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.support_agent_rounded, color: AppColors.primary, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                appState.translate('needMoreHelp'),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                appState.translate('contactSchoolOffice'),
+                                style: const TextStyle(fontSize: 11.5, color: Color(0xFF4B5563), height: 1.3),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 // "Show More FAQs" / "Show Fewer FAQs" Toggle Button (Only when search is empty)
                 if (query.isEmpty) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 14),
                   Center(
                     child: TextButton.icon(
                       onPressed: () => setState(() => _showAll = !_showAll),
@@ -1689,41 +1725,6 @@ class _HelpFAQScreenState extends State<HelpFAQScreen> {
                     ),
                   ),
                 ],
-
-                const SizedBox(height: 20),
-
-                // Need More Help / Support Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.support_agent_rounded, color: AppColors.primary, size: 24),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              appState.translate('needMoreHelp'),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              appState.translate('contactSchoolOffice'),
-                              style: const TextStyle(fontSize: 11.5, color: Color(0xFF4B5563), height: 1.3),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),

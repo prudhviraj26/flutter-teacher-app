@@ -33,7 +33,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
 
   Future<void> _fetchData() async {
     if (mounted) setState(() => _isFetching = true);
-    await Provider.of<AppState>(context, listen: false).refreshBroadcasts();
+    await Provider.of<AppState>(context, listen: false).refreshBroadcasts(forceFull: true);
     if (mounted) setState(() => _isFetching = false);
   }
 
@@ -253,7 +253,7 @@ class _SchoolNoticeScreenState extends State<SchoolNoticeScreen> {
           // Notices list
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => appState.refreshBroadcasts(),
+              onRefresh: () => appState.refreshBroadcasts(forceFull: true),
               color: AppColors.primary,
               child: filteredNotices.isNotEmpty
                   ? ListView.builder(
