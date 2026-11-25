@@ -34,10 +34,10 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
     final teacher = appState.teacher;
     final allStudents = appState.students;
 
-    // Check if user is a Class Teacher or has an assigned class
+    // Check if user is a Class Teacher or has any assigned class-teacher section
     final bool isClassTeacher = teacher != null &&
         (teacher.designation == 'Class Teacher' ||
-            (teacher.assignedClass != null && teacher.assignedClass!.trim().isNotEmpty));
+            teacher.allClassTeacherDisplayNames.isNotEmpty);
 
     // 1. SUBJECT TEACHER: Restricted Access View
     if (!isClassTeacher) {
@@ -127,23 +127,33 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
       );
     }
 
-    // 2. CLASS TEACHER: Student List View for assigned class
-    final String assignedClass = teacher.assignedClass ?? '';
+    // 2. CLASS TEACHER: Student List View across all assigned class-teacher sections
+    final assignedSectionIds = teacher.allClassTeacherSectionIds;
+    final assignedClassNames = teacher.allClassTeacherDisplayNames;
+    final assignedNormTokens = assignedClassNames.map(_normalize).where((t) => t.isNotEmpty).toSet();
+    final String assignedClassesText = teacher.formatAssignedClasses(maxInline: 2);
+
     final classStudents = allStudents.where((s) {
-      if (assignedClass.isEmpty) return true;
+      if (assignedSectionIds.isEmpty && assignedNormTokens.isEmpty) return true;
+      if (s.sectionId != null && s.sectionId!.isNotEmpty && assignedSectionIds.contains(s.sectionId)) {
+        return true;
+      }
       final sNorm = _normalize(s.studentClass);
-      final targetNorm = _normalize(assignedClass);
-      return sNorm == targetNorm || s.studentClass.trim().toLowerCase() == assignedClass.trim().toLowerCase();
+      return assignedNormTokens.contains(sNorm) ||
+          assignedClassNames.any((c) => c.trim().toLowerCase() == s.studentClass.trim().toLowerCase());
     }).toList();
 
-    // Filter students by search term
+    // Filter students by search term (supports name, roll, GR, blood group, and class name)
     final filteredStudents = classStudents.where((s) {
       if (_searchTerm.trim().isEmpty) return true;
       final q = _searchTerm.toLowerCase().trim();
+      final qNorm = _normalize(q);
       return s.name.toLowerCase().contains(q) ||
           s.rollNo.toLowerCase().contains(q) ||
           s.enrollmentNo.toLowerCase().contains(q) ||
-          s.bloodGroup.toLowerCase().contains(q);
+          s.bloodGroup.toLowerCase().contains(q) ||
+          s.studentClass.toLowerCase().contains(q) ||
+          (qNorm.isNotEmpty && _normalize(s.studentClass).contains(qNorm));
     }).toList();
 
     return Scaffold(
@@ -184,10 +194,10 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      if (assignedClass.isNotEmpty) ...[
+                      if (assignedClassesText.isNotEmpty) ...[
                         const SizedBox(height: 1),
                         Text(
-                          assignedClass,
+                          assignedClassesText,
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.85),
                             fontSize: 11,
@@ -301,7 +311,7 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
                           Text(
                             _searchTerm.isNotEmpty
                                 ? 'No students found matching "$_searchTerm"'
-                                : 'No students found in $assignedClass',
+                                : 'No students found in ${assignedClassesText.isNotEmpty ? assignedClassesText : 'assigned classes'}',
                             style: TextStyle(
                               fontSize: 13.5,
                               color: Colors.grey.shade600,
@@ -387,8 +397,21 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         const SizedBox(height: 3),
-                                        Row(
+                                        Wrap(
+                                          spacing: 6,
+                                          crossAxisAlignment: WrapCrossAlignment.center,
                                           children: [
+                                            if (student.studentClass.isNotEmpty) ...[
+                                              Text(
+                                                student.studentClass,
+                                                style: const TextStyle(
+                                                  fontSize: 11.5,
+                                                  color: AppColors.primary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              const Text('•', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
+                                            ],
                                             if (student.rollNo.isNotEmpty) ...[
                                               Text(
                                                 'Roll: ${student.rollNo}',
@@ -398,9 +421,7 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
                                                   fontWeight: FontWeight.w500,
                                                 ),
                                               ),
-                                              const SizedBox(width: 6),
                                               const Text('•', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
-                                              const SizedBox(width: 6),
                                             ],
                                             Text(
                                               'GR: ${student.enrollmentNo}',

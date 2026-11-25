@@ -123,7 +123,7 @@ class AppState extends ChangeNotifier {
   List<Student> _students = [];
   List<Announcement> _announcements = [];
   List<ClassUpdate> _classUpdates = [];
-  List<DailyAttendance> _attendanceHistory = [];
+  final List<DailyAttendance> _attendanceHistory = [];
   List<ParentConversation> _parentConversations = [];
   final List<Duty> _duties = [];
   List<StaffNotice> _staffNotices = [];
@@ -140,12 +140,14 @@ class AppState extends ChangeNotifier {
   final Map<String, HealthRecord> _studentHealthCache = {};
   bool _isLoadingHealth = false;
 
-  // Active Attendance Marking Session
-  Map<String, String> _tempAttendance = {}; // studentId -> status ('P' | 'A')
-  Map<String, String> _tempAttendanceReasons = {}; // studentId -> absent reason
+  // Active Attendance Marking Session (keyed by sectionId for multi-class teachers)
+  final Map<String, Map<String, String>> _tempAttendanceBySection = {}; // sectionId -> (studentId -> 'P'|'A')
+  final Map<String, Map<String, String>> _tempAttendanceReasonsBySection = {}; // sectionId -> (studentId -> reason)
+  final Map<String, bool> _isAttendanceSubmittedTodayBySection = {}; // sectionId -> submitted
+  final Map<String, DailyAttendance> _todayAttendanceBySection = {}; // sectionId -> today summary
+  String? _activeAttendanceSectionId;
 
   bool _isLoadingStudents = false;
-  bool _isAttendanceSubmittedToday = false;
   bool _isSubmittingAttendance = false;
 
   // Teacher Own Monthly Attendance & Calendar
@@ -169,7 +171,44 @@ class AppState extends ChangeNotifier {
   String? get schoolLogoBase64 => _schoolLogoBase64;
   String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
   bool get isLoadingStudents => _isLoadingStudents;
-  bool get isAttendanceSubmittedToday => _isAttendanceSubmittedToday;
+
+  String? get activeAttendanceSectionId {
+    if (_activeAttendanceSectionId != null && _activeAttendanceSectionId!.isNotEmpty) {
+      return _activeAttendanceSectionId;
+    }
+    final ids = _teacher?.allClassTeacherSectionIds ?? const [];
+    if (ids.isNotEmpty) return ids.first;
+    return _teacher?.sectionId;
+  }
+
+  String get activeAttendanceClassName =>
+      _teacher?.resolveClassDisplayName(activeAttendanceSectionId) ??
+      _teacher?.assignedClass ??
+      '';
+
+  void setActiveAttendanceSection(String? sectionId, {String? className}) {
+    final resolved = (sectionId != null && sectionId.isNotEmpty)
+        ? sectionId
+        : _teacher?.resolveSectionId(className);
+    if (resolved != null && resolved.isNotEmpty) {
+      _activeAttendanceSectionId = resolved;
+      initTempAttendance(sectionId: resolved, className: className);
+      notifyListeners();
+    }
+  }
+
+  String get _defaultAttendanceSectionKey {
+    final active = activeAttendanceSectionId;
+    if (active != null && active.isNotEmpty) return active;
+    return 'default';
+  }
+
+  bool isAttendanceSubmittedForSection(String? sectionId) {
+    final key = (sectionId != null && sectionId.isNotEmpty) ? sectionId : _defaultAttendanceSectionKey;
+    return _isAttendanceSubmittedTodayBySection[key] == true;
+  }
+
+  bool get isAttendanceSubmittedToday => isAttendanceSubmittedForSection(activeAttendanceSectionId);
   bool get isSubmittingAttendance => _isSubmittingAttendance;
   TeacherMonthlyAttendance? get monthlyAttendance => _monthlyAttendance;
   bool get isLoadingMonthlyAttendance => _isLoadingMonthlyAttendance;
@@ -265,8 +304,46 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Map<String, String> get tempAttendance => _tempAttendance;
-  Map<String, String> get tempAttendanceReasons => _tempAttendanceReasons;
+  Map<String, String> tempAttendanceForSection(String? sectionId) {
+    final key = (sectionId != null && sectionId.isNotEmpty) ? sectionId : _defaultAttendanceSectionKey;
+    return _tempAttendanceBySection[key] ?? const {};
+  }
+
+  Map<String, String> tempAttendanceReasonsForSection(String? sectionId) {
+    final key = (sectionId != null && sectionId.isNotEmpty) ? sectionId : _defaultAttendanceSectionKey;
+    return _tempAttendanceReasonsBySection[key] ?? const {};
+  }
+
+  DailyAttendance? todayAttendanceForSection(String? sectionId) {
+    final key = (sectionId != null && sectionId.isNotEmpty) ? sectionId : _defaultAttendanceSectionKey;
+    return _todayAttendanceBySection[key];
+  }
+
+  /// Filters [_students] strictly to a single section by [sectionId] UUID or normalized [className].
+  List<Student> studentsForSection({String? sectionId, String? className}) {
+    final sid = (sectionId != null && sectionId.isNotEmpty) ? sectionId : null;
+    final resolvedClass = className ?? _teacher?.resolveClassDisplayName(sid);
+    final targetToken = (resolvedClass != null && resolvedClass.isNotEmpty)
+        ? Teacher.normalizeClassToken(resolvedClass)
+        : '';
+
+    if (sid == null && targetToken.isEmpty) {
+      return _students;
+    }
+
+    return _students.where((s) {
+      if (sid != null && s.sectionId != null && s.sectionId!.isNotEmpty) {
+        return s.sectionId == sid;
+      }
+      if (targetToken.isNotEmpty) {
+        return Teacher.normalizeClassToken(s.studentClass) == targetToken;
+      }
+      return false;
+    }).toList();
+  }
+
+  Map<String, String> get tempAttendance => tempAttendanceForSection(activeAttendanceSectionId);
+  Map<String, String> get tempAttendanceReasons => tempAttendanceReasonsForSection(activeAttendanceSectionId);
 
   Completer<void>? _initCompleter;
 
@@ -514,6 +591,69 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Teacher _parseTeacherFromUserMap(
+    Map<String, dynamic> userMap, {
+    String? fallbackMobile,
+  }) {
+    final String firstName = userMap['firstName'] ?? '';
+    final String lastName = userMap['lastName'] ?? '';
+    final String fullName = "$firstName $lastName".trim();
+    final String role = userMap['role'] ?? 'class_teacher';
+
+    final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
+    final String? apiAssignedClass = userMap['assignedClass'] as String?;
+    final String? apiSectionId = userMap['sectionId'] as String?;
+    final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
+
+    List<String> parsedSubjects = [];
+    if (userMap['subjects'] != null && userMap['subjects'] is List) {
+      parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    }
+    if (parsedSubjects.isEmpty) {
+      parsedSubjects = ['General'];
+    }
+
+    List<String>? parsedAssignedClasses;
+    if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
+      parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    }
+
+    List<ClassSectionAssignment> parsedCtSections = [];
+    if (userMap['classTeacherSections'] != null && userMap['classTeacherSections'] is List) {
+      parsedCtSections = (userMap['classTeacherSections'] as List)
+          .whereType<Map>()
+          .map((e) => ClassSectionAssignment.fromJson(Map<String, dynamic>.from(e)))
+          .where((c) => c.sectionId.isNotEmpty || c.displayName.isNotEmpty)
+          .toList();
+    }
+
+    final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
+        ? 'Class Teacher'
+        : 'Subject Teacher';
+
+    final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
+    final String? apiPhotoUrl = userMap['photoUrl'] as String?;
+    final String? apiSchoolLogoUrl = userMap['schoolLogoUrl'] as String?;
+
+    return Teacher(
+      id: userMap['id'] ?? 'T001',
+      name: fullName.isNotEmpty ? fullName : 'Teacher',
+      employeeId: apiEmployeeId,
+      mobile: userMap['mobile'] ?? (fallbackMobile ?? ''),
+      email: userMap['email'] ?? '',
+      designation: designation,
+      assignedClass: apiAssignedClass,
+      sectionId: apiSectionId,
+      assignedClasses: parsedAssignedClasses,
+      classTeacherSections: parsedCtSections,
+      subjects: parsedSubjects,
+      joiningDate: joiningDate,
+      schoolName: apiSchoolName,
+      photoUrl: apiPhotoUrl,
+      schoolLogoUrl: apiSchoolLogoUrl,
+    );
+  }
+
   Future<void> loadLiveData({bool skipGetMe = false}) async {
     if (!_loggedIn) return;
 
@@ -527,9 +667,6 @@ class AppState extends ChangeNotifier {
           final meResponse = await AuthService.getMe();
           final userMap = meResponse['user'] as Map<String, dynamic>?;
           if (userMap != null) {
-            final String firstName = userMap['firstName'] ?? '';
-            final String lastName = userMap['lastName'] ?? '';
-            final String fullName = "$firstName $lastName".trim();
             final String role = userMap['role'] ?? 'class_teacher';
             if (role == 'parent') {
               debugPrint('RBAC: Teacher /auth/me returned parent role. Logging out.');
@@ -537,53 +674,12 @@ class AppState extends ChangeNotifier {
               return;
             }
 
-            final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
-            final String? apiAssignedClass = userMap['assignedClass'] as String?;
-            final String? apiSectionId = userMap['sectionId'] as String?;
-            final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
-
-            List<String> parsedSubjects = [];
-            if (userMap['subjects'] != null && userMap['subjects'] is List) {
-              parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-            }
-            if (parsedSubjects.isEmpty) {
-              parsedSubjects = ['General'];
-            }
-
-            List<String>? parsedAssignedClasses;
-            if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
-              parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-            }
-
-            final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
-                ? 'Class Teacher'
-                : 'Subject Teacher';
-
-            final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
-            final String? apiPhotoUrl = userMap['photoUrl'] as String?;
-            final String? apiSchoolLogoUrl = userMap['schoolLogoUrl'] as String?;
-
-            _teacher = Teacher(
-              id: userMap['id'] ?? 'T001',
-              name: fullName.isNotEmpty ? fullName : 'Teacher',
-              employeeId: apiEmployeeId,
-              mobile: userMap['mobile'] ?? (_teacher?.mobile ?? ''),
-              email: userMap['email'] ?? '',
-              designation: designation,
-              assignedClass: apiAssignedClass,
-              sectionId: apiSectionId,
-              assignedClasses: parsedAssignedClasses,
-              subjects: parsedSubjects,
-              joiningDate: joiningDate,
-              schoolName: apiSchoolName,
-              photoUrl: apiPhotoUrl,
-              schoolLogoUrl: apiSchoolLogoUrl,
-            );
+            _teacher = _parseTeacherFromUserMap(userMap, fallbackMobile: _teacher?.mobile);
 
             // Sync media assets with local cache for 0-egress fast rendering
             await _syncMediaAssets(
-              apiSchoolLogoUrl,
-              apiPhotoUrl,
+              _teacher!.schoolLogoUrl,
+              _teacher!.photoUrl,
               _teacher!.id,
               _teacher!.employeeId,
             );
@@ -603,7 +699,7 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      final String? teacherSectionId = _teacher?.sectionId;
+      final List<String> teacherSectionIds = _teacher?.allClassTeacherSectionIds ?? const [];
 
       // Proactively ensure academic years are loaded & rollover cache check runs before delta sync
       try {
@@ -614,18 +710,18 @@ class AppState extends ChangeNotifier {
 
       // Run independent data fetching pipelines concurrently
       await Future.wait([
-        // Pipeline 1: Live students and attendance percentages
+        // Pipeline 1: Live students and attendance percentages across all assigned sections
         () async {
           try {
-            var liveStudents = await TeacherDataService.fetchStudents(sectionId: teacherSectionId);
-            if (liveStudents.isEmpty && teacherSectionId != null) {
+            var liveStudents = await TeacherDataService.fetchStudents(sectionIds: teacherSectionIds);
+            if (liveStudents.isEmpty && teacherSectionIds.isNotEmpty) {
               liveStudents = await TeacherDataService.fetchStudents();
             }
             _students = liveStudents;
 
             try {
               final attPercentages = await TeacherDataService.fetchStudentAttendancePercentages(
-                sectionId: teacherSectionId,
+                sectionIds: teacherSectionIds,
               );
               if (attPercentages.isNotEmpty) {
                 _students = _students.map((s) {
@@ -694,20 +790,7 @@ class AppState extends ChangeNotifier {
         try {
           final liveSubjects = await TeacherDataService.fetchSubjectAssignments(_teacher!.id);
           if (liveSubjects.isNotEmpty) {
-            _teacher = Teacher(
-              id: _teacher!.id,
-              name: _teacher!.name,
-              employeeId: _teacher!.employeeId,
-              mobile: _teacher!.mobile,
-              email: _teacher!.email,
-              designation: _teacher!.designation,
-              assignedClass: _teacher!.assignedClass,
-              sectionId: _teacher!.sectionId,
-              assignedClasses: _teacher!.assignedClasses,
-              subjects: liveSubjects,
-              joiningDate: _teacher!.joiningDate,
-              schoolName: _teacher!.schoolName,
-            );
+            _teacher = _teacher!.copyWith(subjects: liveSubjects);
           }
         } catch (e) {
           debugPrint("Error fetching live subject assignments: $e");
@@ -798,53 +881,8 @@ class AppState extends ChangeNotifier {
           await ApiService.clearTokens();
           return false;
         }
-        final String firstName = userMap['firstName'] ?? '';
-        final String lastName = userMap['lastName'] ?? '';
-        final String fullName = "$firstName $lastName".trim();
         final String role = userMap['role'] ?? 'class_teacher';
-
-        final String apiSchoolName = userMap['schoolName'] as String? ?? 'Demo International School';
-        final String? apiAssignedClass = userMap['assignedClass'] as String?;
-        final String? apiSectionId = userMap['sectionId'] as String?;
-        final String apiEmployeeId = userMap['employeeId'] as String? ?? userMap['employeeCode'] as String? ?? 'EMP-2026-001';
-
-        List<String> parsedSubjects = [];
-        if (userMap['subjects'] != null && userMap['subjects'] is List) {
-          parsedSubjects = (userMap['subjects'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-        }
-        if (parsedSubjects.isEmpty) {
-          parsedSubjects = ['General'];
-        }
-
-        List<String>? parsedAssignedClasses;
-        if (userMap['assignedClasses'] != null && userMap['assignedClasses'] is List) {
-          parsedAssignedClasses = (userMap['assignedClasses'] as List).map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
-        }
-
-        final String designation = (role == 'class_teacher' || (userMap['roles'] is List && (userMap['roles'] as List).contains('class_teacher')))
-            ? 'Class Teacher'
-            : 'Subject Teacher';
-
-        final String joiningDate = userMap['joiningDate'] as String? ?? userMap['dateOfJoining'] as String? ?? '01-06-2022';
-        final String? apiPhotoUrl = userMap['photoUrl'] as String?;
-        final String? apiSchoolLogoUrl = userMap['schoolLogoUrl'] as String?;
-
-        final loadedTeacher = Teacher(
-          id: userMap['id'] ?? 'T001',
-          name: fullName.isNotEmpty ? fullName : 'Teacher',
-          employeeId: apiEmployeeId,
-          mobile: userMap['mobile'] ?? mobile,
-          email: userMap['email'] ?? '',
-          designation: designation,
-          assignedClass: apiAssignedClass,
-          sectionId: apiSectionId,
-          assignedClasses: parsedAssignedClasses,
-          subjects: parsedSubjects,
-          joiningDate: joiningDate,
-          schoolName: apiSchoolName,
-          photoUrl: apiPhotoUrl,
-          schoolLogoUrl: apiSchoolLogoUrl,
-        );
+        final loadedTeacher = _parseTeacherFromUserMap(userMap, fallbackMobile: mobile);
 
         _mustChangePassword = (response['mustChangePassword'] == true) || (userMap['mustChangePassword'] == true);
         final String empId = loadedTeacher.employeeId;
@@ -875,7 +913,7 @@ class AppState extends ChangeNotifier {
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
         _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}') ??
             _prefs?.getString('veyho_teacher_avatar_${loadedTeacher.id}');
-        _syncMediaAssets(apiSchoolLogoUrl, apiPhotoUrl, loadedTeacher.id, loadedTeacher.employeeId);
+        _syncMediaAssets(loadedTeacher.schoolLogoUrl, loadedTeacher.photoUrl, loadedTeacher.id, loadedTeacher.employeeId);
         // Instant local cache loads
         await _loadReadNoticeIds();
         await _loadCachedNotices();
@@ -944,6 +982,13 @@ class AppState extends ChangeNotifier {
     _classUpdates.clear();
     _readNoticeIds.clear();
     _albums.clear();
+    _students.clear();
+    _activeAttendanceSectionId = null;
+    _attendanceHistory.clear();
+    _tempAttendanceBySection.clear();
+    _tempAttendanceReasonsBySection.clear();
+    _isAttendanceSubmittedTodayBySection.clear();
+    _todayAttendanceBySection.clear();
     await _prefs?.remove('veyho_teacher_user');
     notifyListeners();
   }
@@ -1137,18 +1182,21 @@ class AppState extends ChangeNotifier {
   /// Collects all canonical class tokens the currently authenticated teacher is assigned to
   List<String> _getTeacherCanonicalClasses() {
     final teacherClasses = <String>[];
-    if (_teacher?.assignedClass != null && _teacher!.assignedClass!.isNotEmpty) {
-      final norm = _canonicalClass(_teacher!.assignedClass!);
-      if (norm.isNotEmpty) teacherClasses.add(norm);
+    if (_teacher == null) return teacherClasses;
+    void addClass(String raw) {
+      if (raw.isEmpty) return;
+      final norm = _canonicalClass(raw);
+      if (norm.isNotEmpty && !teacherClasses.contains(norm)) {
+        teacherClasses.add(norm);
+      }
     }
-    if (_teacher?.assignedClasses != null) {
+
+    for (final c in _teacher!.allClassTeacherDisplayNames) {
+      addClass(c);
+    }
+    if (_teacher!.assignedClasses != null) {
       for (final c in _teacher!.assignedClasses!) {
-        if (c.isNotEmpty) {
-          final norm = _canonicalClass(c);
-          if (norm.isNotEmpty && !teacherClasses.contains(norm)) {
-            teacherClasses.add(norm);
-          }
-        }
+        addClass(c);
       }
     }
     return teacherClasses;
@@ -1518,7 +1566,11 @@ class AppState extends ChangeNotifier {
   }
 
   // Add Class Announcement with live API Sync to Web Admin Sent Items
-  Future<void> addAnnouncement(Announcement ann, {List<dynamic>? rawAttachments}) async {
+  Future<void> addAnnouncement(
+    Announcement ann, {
+    List<dynamic>? rawAttachments,
+    String? targetSectionId,
+  }) async {
     _announcements.insert(0, ann);
     _readNoticeIds.add(ann.id);
     await _saveReadNoticeIds();
@@ -1526,13 +1578,16 @@ class AppState extends ChangeNotifier {
 
     if (_loggedIn) {
       try {
-        final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
+        final resolvedSectionId = (targetSectionId != null && targetSectionId.isNotEmpty)
+            ? targetSectionId
+            : (_teacher?.resolveSectionId(ann.classScope) ?? _teacher?.sectionId);
+        final hasSection = resolvedSectionId != null && resolvedSectionId.isNotEmpty;
         await TeacherDataService.createBroadcast(
           title: ann.title,
           message: ann.message,
           targetType: hasSection ? 'section' : 'school',
           broadcastType: BroadcastType.classNotice,
-          targetSectionId: hasSection ? _teacher!.sectionId : null,
+          targetSectionId: hasSection ? resolvedSectionId : null,
           attachments: rawAttachments ?? ann.attachments,
         );
         refreshBroadcasts();
@@ -1726,7 +1781,11 @@ class AppState extends ChangeNotifier {
   }
 
   // Add Class Update with live API Sync to Web Admin Sent Items
-  Future<void> addClassUpdate(ClassUpdate update, {List<dynamic>? rawAttachments}) async {
+  Future<void> addClassUpdate(
+    ClassUpdate update, {
+    List<dynamic>? rawAttachments,
+    String? targetSectionId,
+  }) async {
     _classUpdates.insert(0, update);
     _readNoticeIds.add(update.id);
     await _saveReadNoticeIds();
@@ -1737,7 +1796,10 @@ class AppState extends ChangeNotifier {
       try {
         final broadcastTitle = "${update.subject}: ${update.title}";
         final broadcastBody = update.description;
-        final hasSection = _teacher?.sectionId != null && _teacher!.sectionId!.isNotEmpty;
+        final resolvedSectionId = (targetSectionId != null && targetSectionId.isNotEmpty)
+            ? targetSectionId
+            : (_teacher?.resolveSectionId(update.classTarget) ?? _teacher?.sectionId);
+        final hasSection = resolvedSectionId != null && resolvedSectionId.isNotEmpty;
         final broadcastType = update.type.toLowerCase() == 'classwork'
             ? BroadcastType.classwork
             : BroadcastType.homework;
@@ -1746,7 +1808,7 @@ class AppState extends ChangeNotifier {
           message: broadcastBody,
           targetType: hasSection ? 'section' : 'school',
           broadcastType: broadcastType,
-          targetSectionId: hasSection ? _teacher!.sectionId : null,
+          targetSectionId: hasSection ? resolvedSectionId : null,
           attachments: rawAttachments ?? update.attachments,
         );
 
@@ -1853,42 +1915,65 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  // Active Attendance operations
-  void initTempAttendance() {
-    final validIds = _students.map((s) => s.id).toSet();
-    _tempAttendance.removeWhere((key, value) => !validIds.contains(key));
-    _tempAttendanceReasons.removeWhere((key, value) => !validIds.contains(key));
-    for (var s in _students) {
-      if (!_tempAttendance.containsKey(s.id)) {
-        _tempAttendance[s.id] = 'P';
-      }
+  String _resolveAttendanceSectionId(String? sectionId) {
+    if (sectionId != null && sectionId.isNotEmpty) return sectionId;
+    return _defaultAttendanceSectionKey;
+  }
+
+  // Active Attendance operations (scoped per sectionId)
+  void initTempAttendance({String? sectionId, String? className}) {
+    final key = _resolveAttendanceSectionId(sectionId);
+    final sectionStudents = studentsForSection(sectionId: key == 'default' ? null : key, className: className);
+    final validIds = sectionStudents.map((s) => s.id).toSet();
+
+    final tempMap = _tempAttendanceBySection.putIfAbsent(key, () => {});
+    final reasonMap = _tempAttendanceReasonsBySection.putIfAbsent(key, () => {});
+
+    tempMap.removeWhere((id, _) => !validIds.contains(id));
+    reasonMap.removeWhere((id, _) => !validIds.contains(id));
+    for (final s in sectionStudents) {
+      tempMap.putIfAbsent(s.id, () => 'P');
     }
   }
 
-  void updateTempAttendance(String studentId, String status) {
-    _tempAttendance[studentId] = status;
+  void updateTempAttendance(String studentId, String status, {String? sectionId}) {
+    final key = _resolveAttendanceSectionId(sectionId);
+    final tempMap = _tempAttendanceBySection.putIfAbsent(key, () => {});
+    tempMap[studentId] = status;
     if (status == 'P') {
-      _tempAttendanceReasons.remove(studentId);
+      _tempAttendanceReasonsBySection[key]?.remove(studentId);
     }
     notifyListeners();
   }
 
-  void updateTempAttendanceReason(String studentId, String reason) {
-    _tempAttendanceReasons[studentId] = reason;
+  void updateTempAttendanceReason(String studentId, String reason, {String? sectionId}) {
+    final key = _resolveAttendanceSectionId(sectionId);
+    final reasonMap = _tempAttendanceReasonsBySection.putIfAbsent(key, () => {});
+    reasonMap[studentId] = reason;
     notifyListeners();
   }
 
-  Future<void> fetchTodayAttendanceSession() async {
-    final String? sectionId = _teacher?.sectionId;
-    if (sectionId == null || sectionId.isEmpty) return;
+  Future<void> fetchTodayAttendanceSession({String? sectionId}) async {
+    if (sectionId != null && sectionId.isNotEmpty) {
+      await _fetchSingleAttendanceSession(sectionId);
+      notifyListeners();
+      return;
+    }
+    final sectionIds = _teacher?.allClassTeacherSectionIds ?? const [];
+    if (sectionIds.isEmpty) return;
+    await Future.wait(sectionIds.map(_fetchSingleAttendanceSession));
+    notifyListeners();
+  }
 
+  Future<void> _fetchSingleAttendanceSession(String sectionId) async {
     final now = DateTime.now();
     final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+    final classLabel = _teacher?.resolveClassDisplayName(sectionId) ?? _teacher?.assignedClass ?? 'Nursery A';
 
     try {
       final sessionData = await TeacherDataService.fetchAttendanceSession(sectionId, dateStr);
       if (sessionData != null && sessionData['session'] != null) {
-        _isAttendanceSubmittedToday = true;
+        _isAttendanceSubmittedTodayBySection[sectionId] = true;
         final List? sessionStudents = sessionData['students'] as List?;
         if (sessionStudents != null) {
           final Map<String, String> fetchedTemp = {};
@@ -1921,49 +2006,58 @@ class AppState extends ChangeNotifier {
           }
 
           if (fetchedTemp.isNotEmpty) {
-            _tempAttendance = fetchedTemp;
-            _tempAttendanceReasons = fetchedReasons;
+            _tempAttendanceBySection[sectionId] = fetchedTemp;
+            _tempAttendanceReasonsBySection[sectionId] = fetchedReasons;
           }
 
-          final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
-          _attendanceHistory = [
-            DailyAttendance(
-              date: dateStr,
-              classTarget: _teacher?.assignedClass ?? 'Nursery A',
-              records: records,
-              submittedBy: _teacher?.id ?? 'T001',
-              submittedAt: "$dateStr $timeStr",
-            )
-          ];
+          final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+          final summary = DailyAttendance(
+            date: dateStr,
+            classTarget: classLabel,
+            sectionId: sectionId,
+            records: records,
+            submittedBy: _teacher?.id ?? 'T001',
+            submittedAt: "$dateStr $timeStr",
+          );
+          _todayAttendanceBySection[sectionId] = summary;
+          _attendanceHistory.removeWhere((h) => h.date == dateStr && (h.sectionId == sectionId || h.classTarget == classLabel));
+          _attendanceHistory.insert(0, summary);
         }
       } else {
-        _isAttendanceSubmittedToday = false;
-        initTempAttendance();
+        _isAttendanceSubmittedTodayBySection[sectionId] = false;
+        initTempAttendance(sectionId: sectionId, className: classLabel);
       }
     } catch (e) {
-      debugPrint("Error fetching today's attendance session: $e");
+      debugPrint("Error fetching today's attendance session for $sectionId: $e");
     }
-    notifyListeners();
   }
 
   String? _lastAttendanceError;
   String? get lastAttendanceError => _lastAttendanceError;
 
-  Future<bool> submitAttendance(String teacherId) async {
+  Future<bool> submitAttendance(
+    String teacherId, {
+    String? sectionId,
+    String? classTarget,
+  }) async {
     _isSubmittingAttendance = true;
     _lastAttendanceError = null;
     notifyListeners();
 
-    final String? sectionId = _teacher?.sectionId;
-    if (sectionId == null || sectionId.isEmpty) {
+    final String? targetSectionId = (sectionId != null && sectionId.isNotEmpty)
+        ? sectionId
+        : _teacher?.sectionId;
+    if (targetSectionId == null || targetSectionId.isEmpty) {
       _lastAttendanceError = 'No assigned section found for your teacher profile.';
       _isSubmittingAttendance = false;
       notifyListeners();
       return false;
     }
 
-    if (_students.isEmpty) {
-      _lastAttendanceError = 'No students found in your section roster.';
+    final resolvedClassTarget = classTarget ?? _teacher?.resolveClassDisplayName(targetSectionId) ?? _teacher?.assignedClass ?? 'Grade 10 A';
+    final sectionStudents = studentsForSection(sectionId: targetSectionId, className: resolvedClassTarget);
+    if (sectionStudents.isEmpty) {
+      _lastAttendanceError = 'No students found in $resolvedClassTarget roster.';
       _isSubmittingAttendance = false;
       notifyListeners();
       return false;
@@ -1974,11 +2068,13 @@ class AppState extends ChangeNotifier {
 
     final List<Map<String, String>> apiRecords = [];
     final List<AttendanceRecord> localRecords = [];
+    final tempMap = _tempAttendanceBySection[targetSectionId] ?? const {};
+    final reasonMap = _tempAttendanceReasonsBySection[targetSectionId] ?? const {};
 
     // Strictly build records from current section students list only
-    for (var s in _students) {
-      final status = _tempAttendance[s.id] ?? 'P';
-      final reason = (_tempAttendanceReasons[s.id] ?? '').trim();
+    for (var s in sectionStudents) {
+      final status = tempMap[s.id] ?? 'P';
+      final reason = (reasonMap[s.id] ?? '').trim();
       final Map<String, String> recordMap = {
         'studentId': s.id,
         'status': status == 'P' ? 'present' : 'absent',
@@ -1996,26 +2092,26 @@ class AppState extends ChangeNotifier {
     }
 
     final String? error = await TeacherDataService.submitAttendance(
-      sectionId: sectionId,
+      sectionId: targetSectionId,
       date: dateStr,
       records: apiRecords,
     );
 
     if (error == null) {
-      _isAttendanceSubmittedToday = true;
-      final timeStr = "${now.hour > 12 ? now.hour - 12 : now.hour}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+      _isAttendanceSubmittedTodayBySection[targetSectionId] = true;
+      final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
 
-      _attendanceHistory.removeWhere((h) => h.date == dateStr);
-      _attendanceHistory.insert(
-        0,
-        DailyAttendance(
-          date: dateStr,
-          classTarget: _teacher?.assignedClass ?? 'Grade 10 A',
-          records: localRecords,
-          submittedBy: teacherId,
-          submittedAt: "$dateStr $timeStr",
-        ),
+      final summary = DailyAttendance(
+        date: dateStr,
+        classTarget: resolvedClassTarget,
+        sectionId: targetSectionId,
+        records: localRecords,
+        submittedBy: teacherId,
+        submittedAt: "$dateStr $timeStr",
       );
+      _todayAttendanceBySection[targetSectionId] = summary;
+      _attendanceHistory.removeWhere((h) => h.date == dateStr && (h.sectionId == targetSectionId || h.classTarget == resolvedClassTarget));
+      _attendanceHistory.insert(0, summary);
       _isSubmittingAttendance = false;
       notifyListeners();
       return true;

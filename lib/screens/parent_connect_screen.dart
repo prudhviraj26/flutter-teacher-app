@@ -57,9 +57,12 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             final filteredStudents = appState.students.where((s) {
-              final q = _newChatSearchQuery.toLowerCase();
+              final q = _newChatSearchQuery.toLowerCase().trim();
+              final qNorm = Teacher.normalizeClassToken(q);
               return s.name.toLowerCase().contains(q) ||
-                  s.parentName.toLowerCase().contains(q);
+                  s.parentName.toLowerCase().contains(q) ||
+                  s.studentClass.toLowerCase().contains(q) ||
+                  (qNorm.isNotEmpty && Teacher.normalizeClassToken(s.studentClass).contains(qNorm));
             }).toList();
 
             return Container(
@@ -110,7 +113,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                     },
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      hintText: 'Search student or parent to chat...',
+                      hintText: 'Search student, parent, or class...',
                       fillColor: const Color(0xFFF5F7FA),
                       filled: true,
                       border: OutlineInputBorder(
@@ -365,9 +368,13 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
     final unreadTotal = activeConversations.where((c) => c.unreadCount > 0 || c.unread).length;
 
     final conversations = activeConversations.where((c) {
-      final q = _searchQuery.toLowerCase();
-      final matchesSearch = c.parentName.toLowerCase().contains(q) ||
-          c.studentName.toLowerCase().contains(q);
+      final q = _searchQuery.toLowerCase().trim();
+      final qNorm = Teacher.normalizeClassToken(q);
+      final matchesSearch = q.isEmpty ||
+          c.parentName.toLowerCase().contains(q) ||
+          c.studentName.toLowerCase().contains(q) ||
+          c.studentClass.toLowerCase().contains(q) ||
+          (qNorm.isNotEmpty && Teacher.normalizeClassToken(c.studentClass).contains(qNorm));
       if (!matchesSearch) return false;
       if (_activeFilter == 'unread') {
         return c.unreadCount > 0 || c.unread;
@@ -427,7 +434,7 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
                       },
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                        hintText: 'Search by parent or student name',
+                        hintText: 'Search by parent, student, or class',
                         fillColor: Colors.white,
                         filled: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 12),

@@ -25,191 +25,196 @@ class ComingSoonScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
-      body: Stack(
+      body: Column(
         children: [
-          Column(
-            children: [
-              // Header
-              Container(
-                color: themeColor,
-                padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
+          // Header
+          Container(
+            color: themeColor,
+            padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 12, 24, 20),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Content Area
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 120),
-                  child: Center(
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 400),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Main Feature Icon in glowing container
-                          Container(
-                            width: 96,
-                            height: 96,
-                            decoration: BoxDecoration(
-                              color: themeColor.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Icon(
-                                icon,
-                                size: 48,
-                                color: themeColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Pulsing Rocket Icon Container
-                          Container(
-                            width: 64,
-                            height: 64,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFFA41B), Color(0xFFFF9500)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFFFA41B).withValues(alpha: 0.4),
-                                  blurRadius: 12,
-                                  spreadRadius: 2,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.rocket_launch_rounded,
-                                size: 32,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-
-                          // Coming Soon Text
-                          Text(
-                            appState.translate('comingSoon'),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1F2937),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Description
-                          Text(
-                            description,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: Color(0xFF4B5563),
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-
-                          // Working hard card
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x05000000),
-                                  blurRadius: 10,
-                                  offset: Offset(0, 4),
-                                )
-                              ],
-                              border: Border.all(
-                                color: const Color(0xFFE5E7EB).withValues(alpha: 0.5),
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(24),
-                            child: Text(
-                              currentLang == 'mr'
-                                  ? 'आम्ही हे वैशिष्ठ्य तुमच्यासाठी आणण्यासाठी कठोर परिश्रम करत आहोत. अपडेट्ससाठी संपर्कात रहा!'
-                                  : currentLang == 'hi'
-                                      ? 'हम इस सुविधा को आपके पास लाने के लिए कड़ी मेहनत कर रहे हैं। अपडेट के लिए बने रहें!'
-                                      : "We're working hard to bring you this feature. Stay tuned for updates!",
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Color(0xFF6B7280),
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    child: const Icon(Icons.arrow_back, color: Colors.white),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
 
-          // Fixed Bottom Go Back Button
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(maxWidth: 480),
-              color: Colors.white,
-              padding: const EdgeInsets.all(24),
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themeColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+          // Content Area
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Center(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Main Feature Icon in glowing container
+                      Container(
+                        width: 96,
+                        height: 96,
+                        decoration: BoxDecoration(
+                          color: themeColor.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            icon,
+                            size: 48,
+                            color: themeColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Pulsing Rocket Icon Container
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFA41B), Color(0xFFFF9500)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFFFA41B).withValues(alpha: 0.4),
+                              blurRadius: 12,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: const Center(
+                          child: Icon(
+                            Icons.rocket_launch_rounded,
+                            size: 32,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Coming Soon Text
+                      Text(
+                        appState.translate('comingSoon'),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1F2937),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Description
+                      Text(
+                        description,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF4B5563),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Working hard card
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Color(0x05000000),
+                              blurRadius: 10,
+                              offset: Offset(0, 4),
+                            )
+                          ],
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB).withValues(alpha: 0.5),
+                          ),
+                        ),
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          currentLang == 'mr'
+                              ? 'आम्ही हे वैशिष्ठ्य तुमच्यासाठी आणण्यासाठी कठोर परिश्रम करत आहोत. अपडेट्ससाठी संपर्कात रहा!'
+                              : currentLang == 'hi'
+                                  ? 'हम इस सुविधा को आपके पास लाने के लिए कड़ी मेहनत कर रहे हैं। अपडेट के लिए बने रहें!'
+                                  : "We're working hard to bring you this feature. Stay tuned for updates!",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6B7280),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  elevation: 4,
-                  shadowColor: themeColor.withValues(alpha: 0.4),
                 ),
-                child: Text(
-                  appState.translate('goBackToDashboard'),
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+
+          // Adaptive Bottom Back Bar respecting system navigation insets
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
+            ),
+            child: SafeArea(
+              top: false,
+              child: Center(
+                heightFactor: 1.0,
+                child: Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxWidth: 480),
+                  padding: const EdgeInsets.fromLTRB(24, 14, 24, 16),
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: themeColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 4,
+                      shadowColor: themeColor.withValues(alpha: 0.4),
+                    ),
+                    child: Text(
+                      appState.translate('back'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ),

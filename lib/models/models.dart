@@ -3,6 +3,43 @@ export 'broadcast_type.dart';
 export 'health_record.dart';
 import 'broadcast_type.dart';
 
+class ClassSectionAssignment {
+  final String sectionId;
+  final String? classId;
+  final String className;
+  final String sectionName;
+  final String displayName;
+
+  const ClassSectionAssignment({
+    required this.sectionId,
+    this.classId,
+    required this.className,
+    required this.sectionName,
+    required this.displayName,
+  });
+
+  factory ClassSectionAssignment.fromJson(Map<String, dynamic> json) {
+    final cName = json['className']?.toString() ?? '';
+    final sName = json['sectionName']?.toString() ?? '';
+    final disp = json['displayName']?.toString().trim();
+    return ClassSectionAssignment(
+      sectionId: json['sectionId']?.toString() ?? '',
+      classId: json['classId']?.toString(),
+      className: cName,
+      sectionName: sName,
+      displayName: (disp != null && disp.isNotEmpty) ? disp : '$cName $sName'.trim(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'sectionId': sectionId,
+        if (classId != null) 'classId': classId,
+        'className': className,
+        'sectionName': sectionName,
+        'displayName': displayName,
+      };
+}
+
 class Teacher {
   final String id;
   final String name;
@@ -13,6 +50,7 @@ class Teacher {
   final String? assignedClass;
   final String? sectionId;
   final List<String>? assignedClasses;
+  final List<ClassSectionAssignment> classTeacherSections;
   final List<String> subjects;
   final String joiningDate;
   final String? schoolName;
@@ -29,6 +67,7 @@ class Teacher {
     this.assignedClass,
     this.sectionId,
     this.assignedClasses,
+    this.classTeacherSections = const [],
     required this.subjects,
     required this.joiningDate,
     this.schoolName,
@@ -36,7 +75,51 @@ class Teacher {
     this.schoolLogoUrl,
   });
 
+  Teacher copyWith({
+    String? id,
+    String? name,
+    String? employeeId,
+    String? mobile,
+    String? email,
+    String? designation,
+    String? assignedClass,
+    String? sectionId,
+    List<String>? assignedClasses,
+    List<ClassSectionAssignment>? classTeacherSections,
+    List<String>? subjects,
+    String? joiningDate,
+    String? schoolName,
+    String? photoUrl,
+    String? schoolLogoUrl,
+  }) {
+    return Teacher(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      employeeId: employeeId ?? this.employeeId,
+      mobile: mobile ?? this.mobile,
+      email: email ?? this.email,
+      designation: designation ?? this.designation,
+      assignedClass: assignedClass ?? this.assignedClass,
+      sectionId: sectionId ?? this.sectionId,
+      assignedClasses: assignedClasses ?? this.assignedClasses,
+      classTeacherSections: classTeacherSections ?? this.classTeacherSections,
+      subjects: subjects ?? this.subjects,
+      joiningDate: joiningDate ?? this.joiningDate,
+      schoolName: schoolName ?? this.schoolName,
+      photoUrl: photoUrl ?? this.photoUrl,
+      schoolLogoUrl: schoolLogoUrl ?? this.schoolLogoUrl,
+    );
+  }
+
   factory Teacher.fromJson(Map<String, dynamic> json) {
+    final rawCtSections = json['classTeacherSections'] as List<dynamic>?;
+    final parsedCtSections = rawCtSections != null
+        ? rawCtSections
+            .whereType<Map>()
+            .map((e) => ClassSectionAssignment.fromJson(Map<String, dynamic>.from(e)))
+            .where((c) => c.sectionId.isNotEmpty || c.displayName.isNotEmpty)
+            .toList()
+        : const <ClassSectionAssignment>[];
     return Teacher(
       id: json['id'] as String,
       name: json['name'] as String,
@@ -47,6 +130,7 @@ class Teacher {
       assignedClass: json['assignedClass'] as String?,
       sectionId: json['sectionId'] as String?,
       assignedClasses: (json['assignedClasses'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      classTeacherSections: parsedCtSections,
       subjects: (json['subjects'] as List<dynamic>).map((e) => e as String).toList(),
       joiningDate: json['joiningDate'] as String,
       schoolName: json['schoolName'] as String?,
@@ -66,12 +150,99 @@ class Teacher {
       'assignedClass': assignedClass,
       'sectionId': sectionId,
       'assignedClasses': assignedClasses,
+      'classTeacherSections': classTeacherSections.map((c) => c.toJson()).toList(),
       'subjects': subjects,
       'joiningDate': joiningDate,
       'schoolName': schoolName,
       'photoUrl': photoUrl,
       'schoolLogoUrl': schoolLogoUrl,
     };
+  }
+
+  static String normalizeClassToken(String raw) {
+    return raw
+        .toLowerCase()
+        .replaceAll('grade', '')
+        .replaceAll('class', '')
+        .replaceAll('-', '')
+        .replaceAll(' ', '')
+        .replaceAll(RegExp(r'[^a-z0-9]'), '')
+        .trim();
+  }
+
+  /// Ordered, deduplicated class+section display names where this staff is Class Teacher.
+  List<String> get allClassTeacherDisplayNames {
+    final result = <String>[];
+    for (final s in classTeacherSections) {
+      if (s.displayName.isNotEmpty && !result.contains(s.displayName)) {
+        result.add(s.displayName);
+      }
+    }
+    if (assignedClass != null &&
+        assignedClass!.trim().isNotEmpty &&
+        !result.contains(assignedClass!.trim())) {
+      result.add(assignedClass!.trim());
+    }
+    return result;
+  }
+
+  /// Ordered, deduplicated section IDs where this staff is Class Teacher.
+  List<String> get allClassTeacherSectionIds {
+    final result = <String>[];
+    for (final s in classTeacherSections) {
+      if (s.sectionId.isNotEmpty && !result.contains(s.sectionId)) {
+        result.add(s.sectionId);
+      }
+    }
+    if (sectionId != null &&
+        sectionId!.trim().isNotEmpty &&
+        !result.contains(sectionId!.trim())) {
+      result.add(sectionId!.trim());
+    }
+    return result;
+  }
+
+  /// Resolves a class+section display string (e.g. 'Grade 5 A') to its section UUID.
+  String? resolveSectionId(String? classDisplayName) {
+    if (classDisplayName == null || classDisplayName.trim().isEmpty) {
+      return sectionId ?? (classTeacherSections.isNotEmpty ? classTeacherSections.first.sectionId : null);
+    }
+    final targetLower = classDisplayName.trim().toLowerCase();
+    final targetNorm = normalizeClassToken(classDisplayName);
+    for (final s in classTeacherSections) {
+      if (s.displayName.trim().toLowerCase() == targetLower ||
+          (targetNorm.isNotEmpty && normalizeClassToken(s.displayName) == targetNorm)) {
+        return s.sectionId;
+      }
+    }
+    if (assignedClass != null &&
+        (assignedClass!.trim().toLowerCase() == targetLower ||
+            (targetNorm.isNotEmpty && normalizeClassToken(assignedClass!) == targetNorm))) {
+      return sectionId;
+    }
+    return null;
+  }
+
+  /// Resolves a section UUID back to its display string (e.g. 'Grade 5 A').
+  String? resolveClassDisplayName(String? targetSectionId) {
+    if (targetSectionId != null && targetSectionId.isNotEmpty) {
+      for (final s in classTeacherSections) {
+        if (s.sectionId == targetSectionId && s.displayName.isNotEmpty) {
+          return s.displayName;
+        }
+      }
+    }
+    return assignedClass ?? (classTeacherSections.isNotEmpty ? classTeacherSections.first.displayName : null);
+  }
+
+  /// Formats all Class Teacher assignments for headers, subtitles, and summary cards.
+  String formatAssignedClasses({int? maxInline}) {
+    final names = allClassTeacherDisplayNames;
+    if (names.isEmpty) return '';
+    if (maxInline != null && names.length > maxInline) {
+      return '${names.take(maxInline).join(', ')} +${names.length - maxInline} more';
+    }
+    return names.join(', ');
   }
 
   String get firstName {
@@ -92,6 +263,7 @@ class Student {
   final String rollNo;
   final String enrollmentNo;
   final String studentClass; // mapped from 'class'
+  final String? sectionId;
   final String dateOfBirth;
   final String gender;
   final String parentName;
@@ -110,6 +282,7 @@ class Student {
     required this.rollNo,
     required this.enrollmentNo,
     required this.studentClass,
+    this.sectionId,
     required this.dateOfBirth,
     required this.gender,
     required this.parentName,
@@ -129,6 +302,7 @@ class Student {
     String? rollNo,
     String? enrollmentNo,
     String? studentClass,
+    String? sectionId,
     String? dateOfBirth,
     String? gender,
     String? parentName,
@@ -147,6 +321,7 @@ class Student {
       rollNo: rollNo ?? this.rollNo,
       enrollmentNo: enrollmentNo ?? this.enrollmentNo,
       studentClass: studentClass ?? this.studentClass,
+      sectionId: sectionId ?? this.sectionId,
       dateOfBirth: dateOfBirth ?? this.dateOfBirth,
       gender: gender ?? this.gender,
       parentName: parentName ?? this.parentName,
@@ -478,6 +653,7 @@ class AttendanceRecord {
 class DailyAttendance {
   final String date;
   final String classTarget; // mapped from 'class'
+  final String? sectionId;
   final List<AttendanceRecord> records;
   final String submittedBy;
   final String submittedAt;
@@ -485,6 +661,7 @@ class DailyAttendance {
   DailyAttendance({
     required this.date,
     required this.classTarget,
+    this.sectionId,
     required this.records,
     required this.submittedBy,
     required this.submittedAt,

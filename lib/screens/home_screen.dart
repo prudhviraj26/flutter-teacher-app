@@ -90,8 +90,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ? appState.translate('classTeacher')
         : appState.translate('subjectTeacher');
 
-    final String assignedClassText = teacher.assignedClass != null 
-        ? ' • ${teacher.assignedClass}' 
+    final String formattedClasses = teacher.formatAssignedClasses(maxInline: 2);
+    final String assignedClassText = formattedClasses.isNotEmpty
+        ? ' • $formattedClasses'
         : '';
 
     return Scaffold(
@@ -190,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             ),
                             child: Text(
                               '$designationText$assignedClassText',
-                              maxLines: 1,
+                              maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
@@ -295,7 +296,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       MenuCard(
                         icon: Icons.people_outline,
                         title: appState.translate('students'),
-                        subtitle: teacher.assignedClass ?? appState.translate('studentRoster'),
+                        subtitle: formattedClasses.isNotEmpty
+                            ? formattedClasses
+                            : appState.translate('studentRoster'),
                         backgroundColor: AppColors.secondary,
                         onTap: () => _safeNavigate('/students'),
                       ),

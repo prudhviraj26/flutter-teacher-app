@@ -57,7 +57,9 @@ class TeacherProfileDetailScreen extends StatelessWidget {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
     final designationText = teacher?.designation ??
-        (teacher?.assignedClass != null ? 'Class Teacher' : 'Subject Teacher');
+        ((teacher?.allClassTeacherDisplayNames.isNotEmpty == true)
+            ? 'Class Teacher'
+            : 'Subject Teacher');
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
@@ -139,12 +141,23 @@ class TeacherProfileDetailScreen extends StatelessWidget {
                         _buildReadOnlyRow('Designation', designationText),
                         _buildReadOnlyRow(appState.translate('email'), teacher?.email ?? 'N/A'),
                         _buildReadOnlyRow(appState.translate('mobile'), teacher?.mobile ?? 'N/A'),
-                        if (teacher?.assignedClass != null)
-                          _buildReadOnlyRow(appState.translate('assignedClass'), teacher!.assignedClass!),
-                        if (teacher?.assignedClasses != null &&
-                            teacher!.assignedClasses!.isNotEmpty &&
-                            (teacher.assignedClass == null || !teacher.assignedClasses!.contains(teacher.assignedClass)))
-                          _buildReadOnlyRow(appState.translate('assignedClasses'), teacher.assignedClasses!.join(', ')),
+                        ...() {
+                          final ctClasses = teacher?.allClassTeacherDisplayNames ?? const <String>[];
+                          final extraClasses = (teacher?.assignedClasses ?? const <String>[])
+                              .where((c) => c.isNotEmpty && !ctClasses.contains(c))
+                              .toList();
+                          return [
+                            if (ctClasses.length == 1)
+                              _buildReadOnlyRow(appState.translate('assignedClass'), ctClasses.first)
+                            else if (ctClasses.length > 1)
+                              _buildReadOnlyRow(appState.translate('assignedClasses'), ctClasses.join(', ')),
+                            if (extraClasses.isNotEmpty)
+                              _buildReadOnlyRow(
+                                ctClasses.isEmpty ? appState.translate('assignedClasses') : 'Subject Classes',
+                                extraClasses.join(', '),
+                              ),
+                          ];
+                        }(),
                         _buildReadOnlyRow(
                           appState.translate('subjects'),
                           teacher?.subjects.isNotEmpty == true ? teacher!.subjects.join(', ') : 'N/A',

@@ -9,6 +9,7 @@ import '../services/mobile_compressor.dart';
 import '../services/teacher_data_service.dart';
 import '../services/attachment_local_store.dart';
 import '../widgets/upload_progress_dialog.dart';
+import '../widgets/class_selector_dropdown.dart';
 
 class ClassUpdateScreen extends StatefulWidget {
   const ClassUpdateScreen({super.key});
@@ -29,7 +30,8 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
   final List<AttachmentResult> _selectedAttachments = [];
   bool _failedToPost = false;
 
-  // Search & Refresh state
+  // Search, Filter & Refresh state
+  String _selectedClass = '';
   bool _isSearchOpen = false;
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
@@ -305,9 +307,11 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
         date: dateStr,
       );
 
+      final resolvedSectionId = appState.teacher?.resolveSectionId(_classSection);
       await appState.addClassUpdate(
         newUpdate,
         rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
+        targetSectionId: resolvedSectionId,
       );
 
       await appState.refreshClassUpdates();
@@ -356,18 +360,39 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
 
     final List<String> availableClasses = [];
     if (teacher != null) {
+      for (var c in teacher.allClassTeacherDisplayNames) {
+        if (!availableClasses.contains(c)) availableClasses.add(c);
+      }
       if (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty) {
         for (var c in teacher.assignedClasses!) {
-          if (!availableClasses.contains(c)) availableClasses.add(c);
+          if (c.isNotEmpty && !availableClasses.contains(c)) availableClasses.add(c);
         }
-      }
-      if (teacher.assignedClass != null && teacher.assignedClass!.isNotEmpty && !availableClasses.contains(teacher.assignedClass)) {
-        availableClasses.add(teacher.assignedClass!);
       }
     }
     if (availableClasses.isEmpty) {
       availableClasses.addAll(['Grade 10 A', 'Grade 10 B']);
     }
+    if (_selectedClass.isEmpty || !availableClasses.contains(_selectedClass)) {
+      _selectedClass = availableClasses.first;
+    }
+
+    final Map<String, int> unreadByClass = {};
+    if (availableClasses.length > 1) {
+      for (final c in availableClasses) {
+        final token = Teacher.normalizeClassToken(c);
+        final count = appState.classUpdates.where((u) {
+          final isAuthoredByTeacher = (teacher?.id != null && u.teacherId == teacher!.id) ||
+              (teacher?.name != null && u.teacherName.toLowerCase() == teacher!.name.toLowerCase());
+          if (isAuthoredByTeacher || appState.isNoticeRead(u.id)) return false;
+          return Teacher.normalizeClassToken(u.classTarget) == token;
+        }).length;
+        if (count > 0) unreadByClass[c] = count;
+      }
+    }
+
+    final String headerSubtitle = teacher != null && teacher.allClassTeacherDisplayNames.isNotEmpty
+        ? teacher.formatAssignedClasses(maxInline: 2)
+        : (teacher?.assignedClass ?? '');
 
     final List<String> availableSubjects = [];
     if (teacher != null && teacher.subjects.isNotEmpty) {
@@ -379,9 +404,15 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       availableSubjects.addAll(['Mathematics', 'Science', 'English']);
     }
 
+    final classFiltered = availableClasses.length > 1 && _selectedClass.isNotEmpty
+        ? appState.classUpdates.where((u) {
+            return Teacher.normalizeClassToken(u.classTarget) == Teacher.normalizeClassToken(_selectedClass);
+          }).toList()
+        : appState.classUpdates;
+
     final tabFiltered = _filterType.toLowerCase() == 'all'
-        ? appState.classUpdates
-        : appState.classUpdates.where((u) => u.type.toLowerCase() == _filterType.toLowerCase()).toList();
+        ? classFiltered
+        : classFiltered.where((u) => u.type.toLowerCase() == _filterType.toLowerCase()).toList();
 
     final filteredUpdates = tabFiltered.where((u) {
       final q = _searchTerm.toLowerCase().trim();
@@ -502,10 +533,10 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      if (teacher?.assignedClass != null) ...[
+                                      if (headerSubtitle.isNotEmpty) ...[
                                         const SizedBox(height: 1),
                                         Text(
-                                          teacher!.assignedClass!,
+                                          headerSubtitle,
                                           style: TextStyle(
                                             color: Colors.white.withValues(alpha: 0.85),
                                             fontSize: 11,
@@ -602,40 +633,64 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                       ),
                 const SizedBox(height: 14),
                 
-                // Tabs
+                // Tabs + Header Class Dropdown (when >1 class assigned)
                 Row(
-                  children: ['All', 'Homework', 'Classwork'].map((f) {
-                    final isSelected = _filterType.toLowerCase() == f.toLowerCase();
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: InkWell(
-                        onTap: () => setState(() {
-                          _filterType = f;
-                          if (f.toLowerCase() == 'homework') {
-                            _type = 'Homework';
-                          } else if (f.toLowerCase() == 'classwork') {
-                            _type = 'Classwork';
-                          }
-                        }),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            appState.translate(f.toLowerCase()),
-                            style: TextStyle(
-                              color: isSelected ? AppColors.primary : Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: ['All', 'Homework', 'Classwork'].map((f) {
+                            final isSelected = _filterType.toLowerCase() == f.toLowerCase();
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: InkWell(
+                                onTap: () => setState(() {
+                                  _filterType = f;
+                                  if (f.toLowerCase() == 'homework') {
+                                    _type = 'Homework';
+                                  } else if (f.toLowerCase() == 'classwork') {
+                                    _type = 'Classwork';
+                                  }
+                                }),
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    appState.translate(f.toLowerCase()),
+                                    style: TextStyle(
+                                      color: isSelected ? AppColors.primary : Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                    if (availableClasses.length > 1) ...[
+                      const SizedBox(width: 8),
+                      ClassSelectorDropdown(
+                        classes: availableClasses,
+                        selectedClass: _selectedClass,
+                        accentColor: AppColors.primary,
+                        unreadCounts: unreadByClass,
+                        onChanged: (val) => setState(() {
+                          _selectedClass = val;
+                          if (_showPostForm) {
+                            _classSection = val;
+                          }
+                        }),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -1229,8 +1284,8 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
                 setState(() {
                   _showPostForm = true;
                   _isSearchOpen = false;
-                  if (_classSection.isEmpty && availableClasses.isNotEmpty) {
-                    _classSection = availableClasses.first;
+                  if (availableClasses.isNotEmpty) {
+                    _classSection = _selectedClass.isNotEmpty ? _selectedClass : availableClasses.first;
                   }
                   if (_subject.isEmpty && availableSubjects.isNotEmpty) {
                     _subject = availableSubjects.first;

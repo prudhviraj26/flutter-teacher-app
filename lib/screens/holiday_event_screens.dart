@@ -1486,9 +1486,15 @@ class _EventsScreenState extends State<EventsScreen> {
                             ),
                           ),
                           Text(
-                            (teacher?.assignedClass != null && teacher!.assignedClass!.isNotEmpty)
-                                ? '${teacher.designation} • ${teacher.assignedClass}'
-                                : (teacher?.designation ?? 'Teacher'),
+                            () {
+                              final classesText = teacher?.formatAssignedClasses() ?? '';
+                              if (classesText.isNotEmpty) {
+                                return '${teacher!.designation} • $classesText';
+                              }
+                              return teacher?.designation ?? 'Teacher';
+                            }(),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontSize: 12,
                               color: AppColors.textMuted,

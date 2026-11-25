@@ -14,10 +14,15 @@ class BroadcastSyncResult {
 }
 
 class TeacherDataService {
-  // Fetch Students for current school / section
-  static Future<List<Student>> fetchStudents({String? sectionId}) async {
+  // Fetch Students for current school / section(s)
+  static Future<List<Student>> fetchStudents({String? sectionId, List<String>? sectionIds}) async {
     try {
-      final String queryParam = (sectionId != null && sectionId.isNotEmpty) ? '?sectionId=$sectionId' : '';
+      final effectiveSectionId = (sectionIds != null && sectionIds.isNotEmpty)
+          ? sectionIds.where((id) => id.isNotEmpty).join(',')
+          : sectionId;
+      final String queryParam = (effectiveSectionId != null && effectiveSectionId.isNotEmpty)
+          ? '?sectionId=$effectiveSectionId&pageSize=300'
+          : '?pageSize=300';
       final response = await ApiService.get('/students$queryParam');
 
       List? list;
@@ -475,12 +480,19 @@ class TeacherDataService {
     final bool feeDefaulter = json['feeDefaulter'] == true || json['feeDue'] == true || json['hasDue'] == true;
     final bool absentToday = json['absentToday'] == true;
 
+    final String? mappedSectionId = (sectionData?['id'] ??
+            sectionData?['sectionId'] ??
+            currentEnrollment?['sectionId'] ??
+            json['sectionId'])
+        ?.toString();
+
     return Student(
       id: id,
       name: fullName.isNotEmpty ? fullName : 'Student',
       rollNo: rollNo,
       enrollmentNo: enrollmentNo,
       studentClass: studentClass,
+      sectionId: mappedSectionId,
       dateOfBirth: json['dob'] ?? (json['dateOfBirth']?.toString().split('T')[0] ?? ''),
       gender: (json['gender'] as String?)?.toUpperCase() ?? 'MALE',
       parentName: parentName,
@@ -500,12 +512,16 @@ class TeacherDataService {
     String? academicYearId,
     String? classId,
     String? sectionId,
+    List<String>? sectionIds,
   }) async {
     try {
       final now = DateTime.now();
       final dateTo = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
       final dateFrom = "${now.year - 1}-06-01"; // Academic year start window
-      final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${sectionId != null ? '&sectionId=$sectionId' : ''}&pageSize=100';
+      final effectiveSectionId = (sectionIds != null && sectionIds.isNotEmpty)
+          ? sectionIds.where((id) => id.isNotEmpty).join(',')
+          : sectionId;
+      final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${effectiveSectionId != null && effectiveSectionId.isNotEmpty ? '&sectionId=$effectiveSectionId' : ''}&pageSize=300';
 
       final response = await ApiService.get('/attendance/reports/student-list$query');
       final Map<String, double> map = {};

@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import '../widgets/class_selector_dropdown.dart';
 import 'attendance_screens.dart';
 
 class StudentRosterScreen extends StatefulWidget {
@@ -33,21 +34,23 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
     final teacher = appState.teacher;
     final allStudents = appState.students;
 
-    // Determine available classes from teacher assignments & student records
+    // Determine available classes from Class Teacher assignments (fallback to assignedClasses / students)
     final List<String> availableClasses = [];
     if (teacher != null) {
-      if (teacher.assignedClasses != null && teacher.assignedClasses!.isNotEmpty) {
-        for (var c in teacher.assignedClasses!) {
-          if (!availableClasses.contains(c)) availableClasses.add(c);
+      for (final c in teacher.allClassTeacherDisplayNames) {
+        if (!availableClasses.contains(c)) availableClasses.add(c);
+      }
+      if (availableClasses.isEmpty && teacher.assignedClasses != null) {
+        for (final c in teacher.assignedClasses!) {
+          if (c.isNotEmpty && !availableClasses.contains(c)) availableClasses.add(c);
         }
       }
-      if (teacher.assignedClass != null && teacher.assignedClass!.isNotEmpty && !availableClasses.contains(teacher.assignedClass)) {
-        availableClasses.add(teacher.assignedClass!);
-      }
     }
-    for (var s in allStudents) {
-      if (s.studentClass.isNotEmpty && !availableClasses.contains(s.studentClass)) {
-        availableClasses.add(s.studentClass);
+    if (availableClasses.isEmpty) {
+      for (final s in allStudents) {
+        if (s.studentClass.isNotEmpty && !availableClasses.contains(s.studentClass)) {
+          availableClasses.add(s.studentClass);
+        }
       }
     }
     if (availableClasses.isEmpty) {
@@ -59,35 +62,27 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
       _selectedClass = availableClasses.first;
     }
 
-    String normalizeClassName(String raw) {
-      return raw.toLowerCase()
-          .replaceAll('grade', '')
-          .replaceAll('class', '')
-          .replaceAll('-', '')
-          .replaceAll(' ', '')
-          .trim();
-    }
+    final String? selectedSectionId = _selectedClass == 'All Classes'
+        ? null
+        : teacher?.resolveSectionId(_selectedClass);
 
     // Filter students by selected class
-    List<Student> classStudents = allStudents.where((s) {
-      if (_selectedClass == 'All Classes') {
-        return true;
-      }
-      final sNorm = normalizeClassName(s.studentClass);
-      final targetNorm = normalizeClassName(_selectedClass);
-      return sNorm == targetNorm || s.studentClass.trim().toLowerCase() == _selectedClass.trim().toLowerCase();
-    }).toList();
+    final List<Student> classStudents = _selectedClass == 'All Classes'
+        ? List<Student>.from(allStudents)
+        : appState.studentsForSection(sectionId: selectedSectionId, className: _selectedClass);
 
-    // Sync live today's attendance status from active marking session
-    for (var s in classStudents) {
-      if (appState.tempAttendance.containsKey(s.id)) {
-        s.absentToday = (appState.tempAttendance[s.id] == 'A');
+    // Sync live today's attendance status from this section's active marking session
+    final sectionTemp = appState.tempAttendanceForSection(selectedSectionId);
+    final bool isSelectedClassSubmitted = appState.isAttendanceSubmittedForSection(selectedSectionId);
+    for (final s in classStudents) {
+      if (sectionTemp.containsKey(s.id)) {
+        s.absentToday = (sectionTemp[s.id] == 'A');
       }
     }
 
     // Dynamic Filter counts
     final int allCount = classStudents.length;
-    final int absentCount = appState.isAttendanceSubmittedToday
+    final int absentCount = isSelectedClassSubmitted
         ? classStudents.where((s) => s.absentToday).length
         : 0;
     final int attendanceCount = classStudents.where((s) => s.attendancePercentage < 75).length;
@@ -104,7 +99,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
       if (!matchesSearch) return false;
 
       if (_activeFilter == 'absent') {
-        if (!appState.isAttendanceSubmittedToday) return false;
+        if (!isSelectedClassSubmitted) return false;
         return student.absentToday;
       }
       if (_activeFilter == 'attendance') {
@@ -154,7 +149,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                               ),
                             ),
                             Text(
-                              '$allCount ${appState.translate("totalStudents")}',
+                              '${_selectedClass != 'All Classes' ? '$_selectedClass • ' : ''}$allCount ${appState.translate("totalStudents")}',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.85),
                                 fontSize: 12,
@@ -165,33 +160,13 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                       ],
                     ),
 
-                    // Class Dropdown Selector
-                    if (availableClasses.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: availableClasses.contains(_selectedClass) ? _selectedClass : availableClasses.first,
-                            dropdownColor: AppColors.secondary,
-                            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                            items: availableClasses.map((c) => DropdownMenuItem(
-                              value: c,
-                              child: Text(c, style: const TextStyle(color: Colors.white)),
-                            )).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _selectedClass = val);
-                              }
-                            },
-                          ),
-                        ),
-                      ),
+                    // Class Dropdown Selector (shown when >1 class assigned)
+                    ClassSelectorDropdown(
+                      classes: availableClasses,
+                      selectedClass: _selectedClass,
+                      accentColor: AppColors.secondary,
+                      onChanged: (val) => setState(() => _selectedClass = val),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -244,7 +219,7 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                 : RefreshIndicator(
                     onRefresh: () => appState.loadLiveData(),
                     color: AppColors.secondary,
-                    child: _activeFilter == 'absent' && !appState.isAttendanceSubmittedToday
+                    child: _activeFilter == 'absent' && !isSelectedClassSubmitted
                             ? ListView(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 children: [
@@ -288,6 +263,12 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                                           const SizedBox(height: 20),
                                           ElevatedButton.icon(
                                             onPressed: () {
+                                              if (selectedSectionId != null) {
+                                                appState.setActiveAttendanceSection(
+                                                  selectedSectionId,
+                                                  className: _selectedClass,
+                                                );
+                                              }
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(builder: (_) => const AttendanceRollCallScreen()),

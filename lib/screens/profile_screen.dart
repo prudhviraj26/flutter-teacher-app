@@ -177,8 +177,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? appState.translate('classTeacher')
         : appState.translate('subjectTeacher');
 
-    final String assignedClassText = teacher.assignedClass != null 
-        ? ' • ${teacher.assignedClass}' 
+    final String formattedClasses = teacher.formatAssignedClasses();
+    final String assignedClassText = formattedClasses.isNotEmpty
+        ? ' • $formattedClasses'
         : '';
 
     final menuItems = [

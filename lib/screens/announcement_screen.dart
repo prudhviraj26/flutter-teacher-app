@@ -9,6 +9,7 @@ import '../services/mobile_compressor.dart';
 import '../services/teacher_data_service.dart';
 import '../services/attachment_local_store.dart';
 import '../widgets/upload_progress_dialog.dart';
+import '../widgets/class_selector_dropdown.dart';
 
 class AnnouncementScreen extends StatefulWidget {
   const AnnouncementScreen({super.key});
@@ -26,7 +27,8 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   bool _failedToSend = false;
   final List<AttachmentResult> _selectedAttachments = [];
 
-  // Search & Refresh state
+  // Search, Filter & Refresh state
+  String _selectedClass = '';
   bool _isSearchOpen = false;
   String _searchTerm = '';
   final TextEditingController _searchController = TextEditingController();
@@ -282,14 +284,20 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       final now = DateTime.now();
       final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
       final timeStr = "${now.hour > 12 ? now.hour - 12 : (now.hour == 0 ? 12 : now.hour)}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+      final teacher = appState.teacher;
+      final String targetClassScope = _selectedClass.isNotEmpty
+          ? _selectedClass
+          : (teacher?.assignedClass ??
+              (teacher?.assignedClasses?.isNotEmpty == true ? teacher!.assignedClasses!.first : "All Classes"));
+      final String? targetSectionId = teacher?.resolveSectionId(targetClassScope);
 
       final newAnn = Announcement(
         id: "A${now.millisecondsSinceEpoch}",
         title: title,
         message: message,
-        author: appState.teacher?.name ?? "Teacher",
-        authorId: appState.teacher?.id ?? "",
-        classScope: appState.teacher?.assignedClass ?? (appState.teacher?.assignedClasses?.isNotEmpty == true ? appState.teacher!.assignedClasses!.first : "All Classes"),
+        author: teacher?.name ?? "Teacher",
+        authorId: teacher?.id ?? "",
+        classScope: targetClassScope,
         date: dateStr,
         time: timeStr,
         scope: 'Class',
@@ -300,6 +308,7 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
       await appState.addAnnouncement(
         newAnn,
         rawAttachments: uploadedAttachmentMeta.isNotEmpty ? uploadedAttachmentMeta : null,
+        targetSectionId: targetSectionId,
       );
 
       if (mounted) {
@@ -335,7 +344,47 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final teacher = appState.teacher;
-    final list = appState.announcements;
+
+    final List<String> availableClasses = [];
+    if (teacher != null) {
+      for (final c in teacher.allClassTeacherDisplayNames) {
+        if (!availableClasses.contains(c)) availableClasses.add(c);
+      }
+      if (availableClasses.isEmpty && teacher.assignedClasses != null) {
+        for (final c in teacher.assignedClasses!) {
+          if (c.isNotEmpty && !availableClasses.contains(c)) availableClasses.add(c);
+        }
+      }
+    }
+    if (availableClasses.isNotEmpty &&
+        (_selectedClass.isEmpty || !availableClasses.contains(_selectedClass))) {
+      _selectedClass = availableClasses.first;
+    }
+
+    final Map<String, int> unreadByClass = {};
+    if (availableClasses.length > 1) {
+      for (final c in availableClasses) {
+        final token = Teacher.normalizeClassToken(c);
+        final count = appState.announcements.where((a) {
+          final isAuthoredByTeacher = (teacher?.id != null && a.authorId == teacher!.id) ||
+              (teacher?.name != null && a.author.toLowerCase() == teacher!.name.toLowerCase());
+          if (isAuthoredByTeacher || appState.isNoticeRead(a.id)) return false;
+          return Teacher.normalizeClassToken(a.classScope ?? '') == token;
+        }).length;
+        if (count > 0) unreadByClass[c] = count;
+      }
+    }
+
+    final list = availableClasses.length > 1 && _selectedClass.isNotEmpty
+        ? appState.announcements.where((a) {
+            final targetNorm = Teacher.normalizeClassToken(a.classScope ?? '');
+            return targetNorm == Teacher.normalizeClassToken(_selectedClass);
+          }).toList()
+        : appState.announcements;
+
+    final String headerSubtitle = availableClasses.isNotEmpty
+        ? teacher!.formatAssignedClasses(maxInline: 2)
+        : (teacher?.assignedClass ?? '');
 
     final filteredList = list.where((a) {
       final q = _searchTerm.toLowerCase().trim();
@@ -453,10 +502,10 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  if (teacher?.assignedClass != null) ...[
+                                  if (headerSubtitle.isNotEmpty) ...[
                                     const SizedBox(height: 1),
                                     Text(
-                                      teacher!.assignedClass!,
+                                      headerSubtitle,
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.85),
                                         fontSize: 11,
@@ -545,6 +594,31 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                     ],
                   ),
           ),
+          if (!_isSearchOpen && availableClasses.length > 1)
+            Container(
+              color: AppColors.secondary,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    appState.translate('assignedClass'),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  ClassSelectorDropdown(
+                    classes: availableClasses,
+                    selectedClass: _selectedClass,
+                    accentColor: AppColors.secondary,
+                    unreadCounts: unreadByClass,
+                    onChanged: (val) => setState(() => _selectedClass = val),
+                  ),
+                ],
+              ),
+            ),
           
           // Content
           Expanded(
@@ -604,28 +678,53 @@ class _AnnouncementScreenState extends State<AnnouncementScreen> {
                         ),
                         const SizedBox(height: 12),
                         
-                        // Audience Chip
-                        Container(
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF9FAFB),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.people_outline, size: 14, color: Colors.grey),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${teacher?.assignedClass ?? (teacher?.assignedClasses?.isNotEmpty == true ? teacher!.assignedClasses!.first : "Assigned Classes")} — Class Parents',
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
+                        // Audience Chip / Target Class Selector
+                        if (availableClasses.length > 1)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: AppColors.secondary.withValues(alpha: 0.3)),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: availableClasses.contains(_selectedClass) ? _selectedClass : availableClasses.first,
+                                isDense: true,
+                                icon: const Icon(Icons.arrow_drop_down, color: AppColors.secondary),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
+                                items: availableClasses.map((c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text('$c — Class Parents'),
+                                )).toList(),
+                                onChanged: (val) {
+                                  if (val != null) setState(() => _selectedClass = val);
+                                },
                               ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.lock_outline, size: 12, color: Colors.grey),
-                            ],
+                            ),
+                          )
+                        else
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.people_outline, size: 14, color: Colors.grey),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${_selectedClass.isNotEmpty ? _selectedClass : (teacher?.assignedClass ?? "Assigned Classes")} — Class Parents',
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4B5563)),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.lock_outline, size: 12, color: Colors.grey),
+                              ],
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 16),
                         
                         // Title

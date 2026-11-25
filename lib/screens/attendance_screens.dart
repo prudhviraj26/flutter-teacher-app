@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../constants/colors.dart';
 import '../models/models.dart';
+import '../widgets/class_selector_dropdown.dart';
 
 Future<bool?> showAbsentReasonModal({
   required BuildContext context,
@@ -195,21 +196,35 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final appState = Provider.of<AppState>(context, listen: false);
-      appState.loadLiveData();
+      await appState.loadLiveData();
+      if (mounted) {
+        appState.initTempAttendance(
+          sectionId: appState.activeAttendanceSectionId,
+          className: appState.activeAttendanceClassName,
+        );
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final students = appState.students;
     final teacher = appState.teacher;
 
-    // Class & Section details
-    final String currentClass = teacher?.assignedClass ??
-        (students.isNotEmpty ? students.first.studentClass : '');
+    final assignedClasses = teacher?.allClassTeacherDisplayNames ?? const <String>[];
+    final String? activeSectionId = appState.activeAttendanceSectionId;
+    final String currentClass = appState.activeAttendanceClassName.isNotEmpty
+        ? appState.activeAttendanceClassName
+        : (assignedClasses.isNotEmpty
+            ? assignedClasses.first
+            : (appState.students.isNotEmpty ? appState.students.first.studentClass : ''));
+
+    final students = appState.studentsForSection(
+      sectionId: activeSectionId,
+      className: currentClass,
+    );
 
     // Formatted Today's Date
     final now = DateTime.now();
@@ -274,23 +289,37 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                       ],
                     ),
 
-                    // Class & Section Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-                      ),
-                      child: Text(
-                        currentClass,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
+                    // Class & Section Dropdown (when >1 class assigned) or Badge
+                    if (assignedClasses.length > 1)
+                      ClassSelectorDropdown(
+                        classes: assignedClasses,
+                        selectedClass: currentClass,
+                        accentColor: AppColors.primary,
+                        onChanged: (val) {
+                          final newSectionId = teacher?.resolveSectionId(val);
+                          appState.setActiveAttendanceSection(newSectionId, className: val);
+                          if (newSectionId != null && newSectionId.isNotEmpty) {
+                            appState.fetchTodayAttendanceSession(sectionId: newSectionId);
+                          }
+                        },
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          currentClass,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -705,7 +734,7 @@ class _AttendanceRollCallScreenState extends State<AttendanceRollCallScreen> {
                   onPressed: students.isEmpty
                       ? null
                       : () {
-                    final absentWithoutReason = appState.students.where((s) {
+                    final absentWithoutReason = students.where((s) {
                       final isAbsent = (appState.tempAttendance[s.id] ?? 'P') == 'A';
                       final reason = (appState.tempAttendanceReasons[s.id] ?? '').trim();
                       return isAbsent && reason.isEmpty;
@@ -758,21 +787,23 @@ class AttendanceConfirmationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final total = appState.students.length;
-    final absentIds = appState.tempAttendance.entries
-        .where((e) => e.value == 'A')
-        .map((e) => e.key)
-        .toList();
-    final absentCount = absentIds.length;
-    final presentCount = total - absentCount;
-
-    final absentStudents = appState.students
-        .where((s) => absentIds.contains(s.id))
-        .toList();
-
     final teacher = appState.teacher;
-    final String currentClass = teacher?.assignedClass ??
-        (appState.students.isNotEmpty ? appState.students.first.studentClass : '');
+    final activeSectionId = appState.activeAttendanceSectionId;
+    final String currentClass = appState.activeAttendanceClassName.isNotEmpty
+        ? appState.activeAttendanceClassName
+        : (teacher?.assignedClass ??
+            (appState.students.isNotEmpty ? appState.students.first.studentClass : ''));
+
+    final sectionStudents = appState.studentsForSection(
+      sectionId: activeSectionId,
+      className: currentClass,
+    );
+    final total = sectionStudents.length;
+    final absentStudents = sectionStudents
+        .where((s) => (appState.tempAttendance[s.id] ?? 'P') == 'A')
+        .toList();
+    final absentCount = absentStudents.length;
+    final presentCount = total - absentCount;
 
     final now = DateTime.now();
     final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -1112,12 +1143,21 @@ class AttendanceSubmittedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
     final history = appState.attendanceHistory;
-    final String currentClass = appState.teacher?.assignedClass ?? 'Grade 3-B';
+    final activeSectionId = appState.activeAttendanceSectionId;
+    final String currentClass = appState.activeAttendanceClassName.isNotEmpty
+        ? appState.activeAttendanceClassName
+        : (appState.teacher?.assignedClass ?? '');
+    final sectionStudents = appState.studentsForSection(
+      sectionId: activeSectionId,
+      className: currentClass,
+    );
+    final summary = appState.todayAttendanceForSection(activeSectionId) ??
+        (history.isNotEmpty ? history.first : null);
 
-    int total = appState.students.length;
+    int total = sectionStudents.length;
     int absentCount = 0;
-    if (history.isNotEmpty) {
-      absentCount = history.first.records.where((r) => r.status == 'A').length;
+    if (summary != null) {
+      absentCount = summary.records.where((r) => r.status == 'A').length;
     }
     int presentCount = total - absentCount;
 
@@ -1198,9 +1238,9 @@ class AttendanceSubmittedScreen extends StatelessWidget {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: () {
-                    // Populate temp state with first history element
-                    if (history.isNotEmpty) {
-                      for (var r in history.first.records) {
+                    // Populate temp state with active section's history element
+                    if (summary != null) {
+                      for (var r in summary.records) {
                         appState.updateTempAttendance(r.studentId, r.status);
                         if (r.status == 'A' && r.reason != null && r.reason!.isNotEmpty) {
                           appState.updateTempAttendanceReason(r.studentId, r.reason!);
@@ -1233,11 +1273,16 @@ class AttendanceCorrectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<AppState>(context);
-    final students = appState.students;
-
     final teacher = appState.teacher;
-    final String currentClass = teacher?.assignedClass ??
-        (students.isNotEmpty ? students.first.studentClass : '');
+    final activeSectionId = appState.activeAttendanceSectionId;
+    final String currentClass = appState.activeAttendanceClassName.isNotEmpty
+        ? appState.activeAttendanceClassName
+        : (teacher?.assignedClass ??
+            (appState.students.isNotEmpty ? appState.students.first.studentClass : ''));
+    final students = appState.studentsForSection(
+      sectionId: activeSectionId,
+      className: currentClass,
+    );
 
     final now = DateTime.now();
     final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
