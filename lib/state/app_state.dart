@@ -1124,6 +1124,19 @@ class AppState extends ChangeNotifier {
           return dtB.compareTo(dtA);
         });
       }
+      final annStored = _prefs?.getString('veyho_teacher_announcements_$teacherId');
+      if (annStored != null && annStored.isNotEmpty) {
+        final List<dynamic> list = json.decode(annStored);
+        _announcements = list
+            .map((item) => Announcement.fromJson(item as Map<String, dynamic>))
+            .where((a) => _isWithinCurrentAcademicYear(a.fullDate ?? a.date))
+            .toList();
+        _announcements.sort((a, b) {
+          final dtA = DateTime.tryParse(a.fullDate ?? a.date) ?? DateTime(1970);
+          final dtB = DateTime.tryParse(b.fullDate ?? b.date) ?? DateTime(1970);
+          return dtB.compareTo(dtA);
+        });
+      }
     } catch (e) {
       debugPrint("Error loading cached notices: $e");
     }
@@ -1137,6 +1150,9 @@ class AppState extends ChangeNotifier {
 
       final schoolJson = _notices.map((n) => n.toJson()).toList();
       await _prefs?.setString('veyho_teacher_school_notices_$teacherId', json.encode(schoolJson));
+
+      final annJson = _announcements.map((a) => a.toJson()).toList();
+      await _prefs?.setString('veyho_teacher_announcements_$teacherId', json.encode(annJson));
     } catch (e) {
       debugPrint("Error saving cached notices: $e");
     }
@@ -1160,9 +1176,10 @@ class AppState extends ChangeNotifier {
         subj = 'english';
       }
     }
+    final cls = _canonicalClass(u.classTarget);
     final norm = _normalizeClassUpdateText(u.description);
     final core = norm.length > 40 ? norm.substring(0, 40) : norm;
-    return "${u.type.trim().toLowerCase()}_${subj}_$core";
+    return "${u.type.trim().toLowerCase()}_${cls}_${subj}_$core";
   }
 
   /// Normalizes class/grade strings (e.g. "Grade 5 - A", "Class 5 A") into a canonical token ("5a")
@@ -1572,6 +1589,7 @@ class AppState extends ChangeNotifier {
     _announcements.insert(0, ann);
     _readNoticeIds.add(ann.id);
     await _saveReadNoticeIds();
+    await _saveCachedNotices();
     notifyListeners();
 
     if (_loggedIn) {
@@ -1598,6 +1616,7 @@ class AppState extends ChangeNotifier {
   // Delete Announcement
   void deleteAnnouncement(String id) {
     _announcements.removeWhere((element) => element.id == id);
+    _saveCachedNotices();
     notifyListeners();
   }
 

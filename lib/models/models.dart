@@ -500,6 +500,55 @@ class Announcement {
     this.isRead = false,
     this.broadcastType = BroadcastType.classNotice,
   });
+
+  factory Announcement.fromJson(Map<String, dynamic> json) {
+    final rawAttObjs = json['attachmentObjects'];
+    final List<NoticeAttachment> attObjs = (rawAttObjs is List)
+        ? rawAttObjs.map((a) => NoticeAttachment.fromJson(a)).toList()
+        : (json['attachments'] is List && (json['attachments'] as List).isNotEmpty && (json['attachments'] as List).first is Map)
+            ? (json['attachments'] as List).map((a) => NoticeAttachment.fromJson(a)).toList()
+            : const [];
+    final List<String>? strAtts = (json['attachments'] is List)
+        ? (json['attachments'] as List)
+            .map((a) => a is Map ? (a['name'] ?? '').toString() : a.toString())
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : (attObjs.isNotEmpty ? attObjs.map((a) => a.name).toList() : null);
+
+    return Announcement(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      author: json['author']?.toString() ?? '',
+      authorId: json['authorId']?.toString() ?? '',
+      classScope: json['classScope']?.toString(),
+      date: json['date']?.toString() ?? '',
+      time: json['time']?.toString() ?? '',
+      scope: json['scope']?.toString() ?? 'Class',
+      fullDate: json['fullDate']?.toString(),
+      attachments: strAtts,
+      attachmentObjects: attObjs,
+      isRead: json['isRead'] == true,
+      broadcastType: BroadcastType.fromString(json['broadcastType']?.toString()),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'message': message,
+        'author': author,
+        'authorId': authorId,
+        'classScope': classScope,
+        'date': date,
+        'time': time,
+        'scope': scope,
+        'fullDate': fullDate,
+        'attachments': attachments,
+        'attachmentObjects': attachmentObjects.map((a) => a.toJson()).toList(),
+        'isRead': isRead,
+        'broadcastType': broadcastType.value,
+      };
 }
 
 class StaffNotice {
