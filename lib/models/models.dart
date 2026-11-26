@@ -235,14 +235,34 @@ class Teacher {
     return assignedClass ?? (classTeacherSections.isNotEmpty ? classTeacherSections.first.displayName : null);
   }
 
-  /// Formats all Class Teacher assignments for headers, subtitles, and summary cards.
+  /// Formats all Class Teacher assignments compactly without repeating 'Grade ' / 'Class ' prefix.
+  /// Example: ['Grade 10 A', 'Grade 10 B'] -> 'Grade 10 A, 10 B'
   String formatAssignedClasses({int? maxInline}) {
     final names = allClassTeacherDisplayNames;
     if (names.isEmpty) return '';
-    if (maxInline != null && names.length > maxInline) {
-      return '${names.take(maxInline).join(', ')} +${names.length - maxInline} more';
+
+    final visible = (maxInline != null && names.length > maxInline)
+        ? names.take(maxInline).toList()
+        : names;
+
+    final formatted = <String>[];
+    for (int i = 0; i < visible.length; i++) {
+      final raw = visible[i].trim();
+      if (i == 0) {
+        formatted.add(raw);
+      } else {
+        final stripped = raw
+            .replaceFirst(RegExp(r'^(grade|class)\s+', caseSensitive: false), '')
+            .trim();
+        formatted.add(stripped.isNotEmpty ? stripped : raw);
+      }
     }
-    return names.join(', ');
+
+    final joined = formatted.join(', ');
+    if (maxInline != null && names.length > maxInline) {
+      return '$joined +${names.length - maxInline} more';
+    }
+    return joined;
   }
 
   String get firstName {

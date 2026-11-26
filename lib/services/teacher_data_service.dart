@@ -14,30 +14,48 @@ class BroadcastSyncResult {
 }
 
 class TeacherDataService {
-  // Fetch Students for current school / section(s)
+  // Fetch Students for current school / section(s) with automatic pagination
   static Future<List<Student>> fetchStudents({String? sectionId, List<String>? sectionIds}) async {
     try {
       final effectiveSectionId = (sectionIds != null && sectionIds.isNotEmpty)
           ? sectionIds.where((id) => id.isNotEmpty).join(',')
           : sectionId;
-      final String queryParam = (effectiveSectionId != null && effectiveSectionId.isNotEmpty)
-          ? '?sectionId=$effectiveSectionId&pageSize=300'
-          : '?pageSize=300';
-      final response = await ApiService.get('/students$queryParam');
+      const int pageSize = 100; // Matches backend StudentListQueryDto @Max(100)
+      final List<Student> students = [];
+      int page = 1;
+      int totalPages = 1;
 
-      List? list;
-      if (response is List) {
-        list = response;
-      } else if (response is Map<String, dynamic>) {
-        if (response['items'] is List) {
-          list = response['items'];
-        } else if (response['data'] is List) {
-          list = response['data'];
+      while (page <= totalPages) {
+        final String queryParam = (effectiveSectionId != null && effectiveSectionId.isNotEmpty)
+            ? '?sectionId=$effectiveSectionId&page=$page&pageSize=$pageSize'
+            : '?page=$page&pageSize=$pageSize';
+        final response = await ApiService.get('/students$queryParam');
+
+        List? list;
+        if (response is List) {
+          list = response;
+          totalPages = 1;
+        } else if (response is Map<String, dynamic>) {
+          if (response['items'] is List) {
+            list = response['items'];
+          } else if (response['data'] is List) {
+            list = response['data'];
+          }
+          final apiTotalPages = int.tryParse(response['totalPages']?.toString() ?? '');
+          final apiTotal = int.tryParse(response['total']?.toString() ?? '');
+          if (apiTotalPages != null && apiTotalPages >= 1) {
+            totalPages = apiTotalPages;
+          } else if (apiTotal != null) {
+            totalPages = apiTotal == 0 ? 1 : (apiTotal / pageSize).ceil().clamp(1, 50);
+          } else {
+            totalPages = 1;
+          }
         }
-      }
 
-      if (list != null) {
-        final List<Student> students = [];
+        if (list == null || list.isEmpty) {
+          break;
+        }
+
         for (var item in list) {
           try {
             if (item is Map<String, dynamic>) {
@@ -47,9 +65,13 @@ class TeacherDataService {
             debugPrint('Error mapping student item: $itemErr');
           }
         }
-        return students;
+
+        if (list.length < pageSize) {
+          break;
+        }
+        page++;
       }
-      return [];
+      return students;
     } catch (e) {
       debugPrint('TeacherDataService.fetchStudents error: $e');
       return [];
@@ -521,17 +543,28 @@ class TeacherDataService {
       final effectiveSectionId = (sectionIds != null && sectionIds.isNotEmpty)
           ? sectionIds.where((id) => id.isNotEmpty).join(',')
           : sectionId;
-      final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${effectiveSectionId != null && effectiveSectionId.isNotEmpty ? '&sectionId=$effectiveSectionId' : ''}&pageSize=300';
-
-      final response = await ApiService.get('/attendance/reports/student-list$query');
+      const int pageSize = 100;
       final Map<String, double> map = {};
-      List? items;
-      if (response is Map && response['items'] is List) {
-        items = response['items'];
-      } else if (response is List) {
-        items = response;
-      }
-      if (items != null) {
+      int page = 1;
+      int total = 0;
+
+      while (true) {
+        final query = '?dateFrom=$dateFrom&dateTo=$dateTo${academicYearId != null ? '&academicYearId=$academicYearId' : ''}${classId != null ? '&classId=$classId' : ''}${effectiveSectionId != null && effectiveSectionId.isNotEmpty ? '&sectionId=$effectiveSectionId' : ''}&page=$page&pageSize=$pageSize';
+        final response = await ApiService.get('/attendance/reports/student-list$query');
+
+        List? items;
+        if (response is Map && response['items'] is List) {
+          items = response['items'];
+          total = int.tryParse(response['total']?.toString() ?? '') ?? items!.length;
+        } else if (response is List) {
+          items = response;
+          total = items.length;
+        }
+
+        if (items == null || items.isEmpty) {
+          break;
+        }
+
         for (var item in items) {
           if (item is Map) {
             final sId = item['studentId']?.toString() ?? item['id']?.toString();
@@ -541,6 +574,11 @@ class TeacherDataService {
             }
           }
         }
+
+        if (items.length < pageSize || (page * pageSize) >= total || page >= 50) {
+          break;
+        }
+        page++;
       }
       return map;
     } catch (e) {

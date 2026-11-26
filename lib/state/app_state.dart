@@ -710,7 +710,7 @@ class AppState extends ChangeNotifier {
 
       // Run independent data fetching pipelines concurrently
       await Future.wait([
-        // Pipeline 1: Live students and attendance percentages across all assigned sections
+        // Pipeline 1: Live students, attendance percentages, and today's attendance sessions across all assigned sections
         () async {
           try {
             var liveStudents = await TeacherDataService.fetchStudents(sectionIds: teacherSectionIds);
@@ -734,21 +734,19 @@ class AppState extends ChangeNotifier {
             } catch (attErr) {
               debugPrint("Error fetching student attendance percentages: $attErr");
             }
+
+            // Sequenced after _students loads so initTempAttendance & absentToday flags match populated rosters
+            try {
+              await fetchTodayAttendanceSession();
+            } catch (e) {
+              debugPrint("Error fetching today attendance session: $e");
+            }
           } catch (e) {
             debugPrint("Error fetching live students: $e");
           }
         }(),
 
-        // Pipeline 2: Today's attendance session
-        () async {
-          try {
-            await fetchTodayAttendanceSession();
-          } catch (e) {
-            debugPrint("Error fetching today attendance session: $e");
-          }
-        }(),
-
-        // Pipeline 3: Unified Broadcast & Class Updates Delta Sync (updates notification badge counters)
+        // Pipeline 2: Unified Broadcast & Class Updates Delta Sync (updates notification badge counters)
         () async {
           try {
             await syncBroadcasts();

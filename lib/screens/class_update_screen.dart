@@ -319,9 +319,12 @@ class _ClassUpdateScreenState extends State<ClassUpdateScreen> {
       if (mounted) {
         _showSnackBar(appState.translate('updatePosted'), AppColors.success);
 
-        // Clear
+        // Clear & switch list filter to posted class
         _descriptionController.clear();
         setState(() {
+          if (_classSection.isNotEmpty) {
+            _selectedClass = _classSection;
+          }
           _classSection = '';
           _subject = '';
           _selectedAttachments.clear();

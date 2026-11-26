@@ -150,7 +150,10 @@ class TeacherProfileDetailScreen extends StatelessWidget {
                             if (ctClasses.length == 1)
                               _buildReadOnlyRow(appState.translate('assignedClass'), ctClasses.first)
                             else if (ctClasses.length > 1)
-                              _buildReadOnlyRow(appState.translate('assignedClasses'), ctClasses.join(', ')),
+                              _buildReadOnlyRow(
+                                appState.translate('assignedClasses'),
+                                teacher!.formatAssignedClasses(),
+                              ),
                             if (extraClasses.isNotEmpty)
                               _buildReadOnlyRow(
                                 ctClasses.isEmpty ? appState.translate('assignedClasses') : 'Subject Classes',

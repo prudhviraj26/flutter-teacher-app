@@ -122,43 +122,55 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
+                    Expanded(
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.arrow_back, color: Colors.white),
                             ),
-                            child: const Icon(Icons.arrow_back, color: Colors.white),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              appState.translate('students'),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  appState.translate('students'),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  (availableClasses.length <= 1 && _selectedClass != 'All Classes')
+                                      ? '$_selectedClass • $allCount ${appState.translate("totalStudents")}'
+                                      : '$allCount ${appState.translate("totalStudents")}',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                            Text(
-                              '${_selectedClass != 'All Classes' ? '$_selectedClass • ' : ''}$allCount ${appState.translate("totalStudents")}',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
+
+                    if (availableClasses.length > 1) const SizedBox(width: 8),
 
                     // Class Dropdown Selector (shown when >1 class assigned)
                     ClassSelectorDropdown(
@@ -392,9 +404,9 @@ class _StudentRosterScreenState extends State<StudentRosterScreen> {
                                                         // Status tags row
                                                         Row(
                                                           children: [
-                                                            if (appState.isAttendanceSubmittedToday && s.absentToday)
+                                                            if (isSelectedClassSubmitted && s.absentToday)
                                                               _buildStatusBadge('Absent Today', const Color(0xFFFFEBEE), const Color(0xFFC62828))
-                                                            else if (appState.isAttendanceSubmittedToday)
+                                                            else if (isSelectedClassSubmitted)
                                                               _buildStatusBadge('Present Today', const Color(0xFFE0F2F1), const Color(0xFF00796B))
                                                             else
                                                               _buildStatusBadge('Attendance Pending', const Color(0xFFFEF3C7), const Color(0xFFD97706)),
