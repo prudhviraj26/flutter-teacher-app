@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -86,12 +85,11 @@ class TeacherProfileDetailScreen extends StatelessWidget {
                           radius: 44,
                           backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                           foregroundColor: AppColors.primary,
-                          backgroundImage: appState.profilePic != null
-                              ? MemoryImage(base64Decode(appState.profilePic!))
-                              : (teacher != null && teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                          backgroundImage: appState.profilePicProvider ??
+                              (teacher != null && teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
                                   ? NetworkImage(teacher.photoUrl!)
                                   : null) as ImageProvider?,
-                          child: (appState.profilePic == null && (teacher?.photoUrl == null || teacher!.photoUrl!.isEmpty))
+                          child: (appState.profilePicProvider == null && (teacher?.photoUrl == null || teacher!.photoUrl!.isEmpty))
                               ? Text(
                                   teacher != null && teacher.name.isNotEmpty ? teacher.name[0] : 'T',
                                   style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: AppColors.primary),

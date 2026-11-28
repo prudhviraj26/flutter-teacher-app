@@ -289,7 +289,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       builder: (_) => FullScreenPhotoViewer(
                                         title: teacher.name,
                                         subtitle: '$designationText$assignedClassText',
-                                        base64Image: appState.profilePic,
+                                        imageBytes: appState.profilePicBytes,
                                         photoUrl: teacher.photoUrl,
                                         onChangePhoto: () => _handlePhotoUpload(appState, teacher),
                                       ),
@@ -300,12 +300,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   radius: 32,
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  backgroundImage: appState.profilePic != null
-                                      ? MemoryImage(const Base64Decoder().convert(appState.profilePic!))
-                                      : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                                  backgroundImage: appState.profilePicProvider ??
+                                      (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
                                           ? NetworkImage(teacher.photoUrl!)
                                           : null) as ImageProvider?,
-                                  child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
+                                  child: (appState.profilePicProvider == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
                                       ? Text(
                                           teacher.name.isNotEmpty ? teacher.name[0] : 'T',
                                           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),

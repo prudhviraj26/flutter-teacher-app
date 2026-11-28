@@ -2,6 +2,7 @@ import '../services/api_service.dart';
 import '../services/notification_navigation_service.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 
@@ -165,12 +166,62 @@ class AppState extends ChangeNotifier {
   String? get lastLoginError => _lastLoginError;
   Teacher? get teacher => _teacher;
   String? get profilePic => _profilePic;
+  Uint8List? _profilePicBytes;
+  MemoryImage? _profilePicProvider;
+  Uint8List? get profilePicBytes => _profilePicBytes;
+  MemoryImage? get profilePicProvider => _profilePicProvider;
   String? _schoolLogoUrl;
   String? get schoolLogoUrl => _schoolLogoUrl;
   String? _schoolLogoBase64;
   String? get schoolLogoBase64 => _schoolLogoBase64;
+  Uint8List? _schoolLogoBytes;
+  MemoryImage? _schoolLogoProvider;
+  Uint8List? get schoolLogoBytes => _schoolLogoBytes;
+  MemoryImage? get schoolLogoProvider => _schoolLogoProvider;
   String get currentSchoolName => _teacher?.schoolName ?? schoolConfig.name;
   bool get isLoadingStudents => _isLoadingStudents;
+
+  Uint8List? _decodeBase64Safe(String? b64) {
+    if (b64 == null || b64.isEmpty) return null;
+    try {
+      return base64Decode(b64);
+    } catch (e) {
+      debugPrint('[AppState] Base64 decode error: $e');
+      return null;
+    }
+  }
+
+  void _setProfilePicBase64(String? b64) {
+    if (b64 == null || b64.isEmpty) {
+      _profilePic = null;
+      _profilePicBytes = null;
+      _profilePicProvider = null;
+      return;
+    }
+    if (_profilePic == b64 && _profilePicBytes != null && _profilePicProvider != null) {
+      return;
+    }
+    _profilePic = b64;
+    final bytes = _decodeBase64Safe(b64);
+    _profilePicBytes = bytes;
+    _profilePicProvider = bytes != null ? MemoryImage(bytes) : null;
+  }
+
+  void _setSchoolLogoBase64(String? b64) {
+    if (b64 == null || b64.isEmpty) {
+      _schoolLogoBase64 = null;
+      _schoolLogoBytes = null;
+      _schoolLogoProvider = null;
+      return;
+    }
+    if (_schoolLogoBase64 == b64 && _schoolLogoBytes != null && _schoolLogoProvider != null) {
+      return;
+    }
+    _schoolLogoBase64 = b64;
+    final bytes = _decodeBase64Safe(b64);
+    _schoolLogoBytes = bytes;
+    _schoolLogoProvider = bytes != null ? MemoryImage(bytes) : null;
+  }
 
   String? get activeAttendanceSectionId {
     if (_activeAttendanceSectionId != null && _activeAttendanceSectionId!.isNotEmpty) {
@@ -480,10 +531,12 @@ class AppState extends ChangeNotifier {
     
     // Load cached school logo and teacher avatar from flash storage (0 egress)
     _schoolLogoUrl = _prefs?.getString('veyho_cached_school_logo_url');
-    _schoolLogoBase64 = _prefs?.getString('veyho_cached_school_logo');
+    _setSchoolLogoBase64(_prefs?.getString('veyho_cached_school_logo'));
     if (_teacher != null) {
-      _profilePic = _prefs?.getString('teacher_avatar_${_teacher!.employeeId}') ??
-          _prefs?.getString('veyho_teacher_avatar_${_teacher!.id}');
+      _setProfilePicBase64(
+        _prefs?.getString('teacher_avatar_${_teacher!.employeeId}') ??
+            _prefs?.getString('veyho_teacher_avatar_${_teacher!.id}'),
+      );
     }
 
     // Load cached academic years if available
@@ -545,7 +598,7 @@ class AppState extends ChangeNotifier {
       final cachedLogoPath = _prefs?.getString('veyho_cached_school_logo_path');
       if (_schoolLogoBase64 == null || cachedLogoPath != cleanLogoPath) {
         await _cacheImageLocally(apiSchoolLogoUrl, 'veyho_cached_school_logo', (b64) {
-          _schoolLogoBase64 = b64;
+          _setSchoolLogoBase64(b64);
         });
         await _prefs?.setString('veyho_cached_school_logo_path', cleanLogoPath);
       }
@@ -557,7 +610,7 @@ class AppState extends ChangeNotifier {
       final cachedPhotoPath = _prefs?.getString('veyho_teacher_avatar_path_$teacherId');
       if (_profilePic == null || cachedPhotoPath != cleanPhotoPath) {
         await _cacheImageLocally(apiPhotoUrl, 'teacher_avatar_$employeeId', (b64) {
-          _profilePic = b64;
+          _setProfilePicBase64(b64);
         });
         if (_profilePic != null) {
           await _prefs?.setString('teacher_avatar_$employeeId', _profilePic!);
@@ -585,7 +638,7 @@ class AppState extends ChangeNotifier {
     _lastSyncTime = now;
     debugPrint('[AppState] syncLiveData: auto-refreshing teacher live data in background');
     try {
-      await loadLiveData(skipGetMe: false);
+      await loadLiveData(skipGetMe: false, silent: true);
     } catch (e) {
       debugPrint('[AppState] syncLiveData error: $e');
     }
@@ -654,11 +707,13 @@ class AppState extends ChangeNotifier {
     );
   }
 
-  Future<void> loadLiveData({bool skipGetMe = false}) async {
+  Future<void> loadLiveData({bool skipGetMe = false, bool silent = false}) async {
     if (!_loggedIn) return;
 
-    _isLoadingStudents = true;
-    notifyListeners();
+    if (!silent) {
+      _isLoadingStudents = true;
+      notifyListeners();
+    }
 
     try {
       // Refresh current teacher details from /auth/me if available and not skipped
@@ -841,7 +896,7 @@ class AppState extends ChangeNotifier {
   // Update Profile Picture
   Future<void> updateProfilePic(String? picBase64) async {
     if (_teacher == null) return;
-    _profilePic = picBase64;
+    _setProfilePicBase64(picBase64);
     if (picBase64 != null) {
       await _prefs?.setString('teacher_avatar_${_teacher!.employeeId}', picBase64);
     } else {
@@ -909,8 +964,10 @@ class AppState extends ChangeNotifier {
           'acceptedPrivacyVersion': _acceptedPrivacyVersion,
         };
         await _prefs?.setString('veyho_teacher_user', json.encode(userData));
-        _profilePic = _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}') ??
-            _prefs?.getString('veyho_teacher_avatar_${loadedTeacher.id}');
+        _setProfilePicBase64(
+          _prefs?.getString('teacher_avatar_${loadedTeacher.employeeId}') ??
+              _prefs?.getString('veyho_teacher_avatar_${loadedTeacher.id}'),
+        );
         _syncMediaAssets(loadedTeacher.schoolLogoUrl, loadedTeacher.photoUrl, loadedTeacher.id, loadedTeacher.employeeId);
         // Instant local cache loads
         await _loadReadNoticeIds();
@@ -971,9 +1028,9 @@ class AppState extends ChangeNotifier {
     _loggedIn = false;
     _mustChangePassword = false;
     _teacher = null;
-    _profilePic = null;
+    _setProfilePicBase64(null);
     _schoolLogoUrl = null;
-    _schoolLogoBase64 = null;
+    _setSchoolLogoBase64(null);
     _staffNotices.clear();
     _notices.clear();
     _announcements.clear();
@@ -2169,9 +2226,17 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  String _conversationsDigest(List<ParentConversation> conversations) {
+    return conversations.map((c) {
+      final lastMsgTs = c.lastMessageAt?.millisecondsSinceEpoch ?? 0;
+      return '${c.threadId ?? ""}:${c.parentId}:${c.unreadCount}:${c.unread}:${c.messages.length}:$lastMsgTs:${c.lastMessage}';
+    }).join('||');
+  }
+
   // Parent chats operations
   Future<void> fetchParentConversations() async {
     try {
+      final prevDigest = _conversationsDigest(_parentConversations);
       final liveThreads = await TeacherDataService.fetchTeacherChatThreads();
       // Only keep active threads that have actual messages exchanged
       final validThreads = liveThreads
@@ -2212,6 +2277,11 @@ class AppState extends ChangeNotifier {
         if (!alreadyPresent) {
           validThreads.insert(0, c);
         }
+      }
+
+      final nextDigest = _conversationsDigest(validThreads);
+      if (prevDigest == nextDigest) {
+        return;
       }
 
       _parentConversations = validThreads;

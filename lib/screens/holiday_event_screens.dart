@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -1332,7 +1331,7 @@ class _EventsScreenState extends State<EventsScreen> {
     final appState = Provider.of<AppState>(context);
     final allEvents = appState.events;
     final teacher = appState.teacher;
-    final profilePic = appState.profilePic;
+    final profilePicBytes = appState.profilePicBytes;
     final isLoading = appState.isEventsLoading;
 
     // Filter events based on category
@@ -1451,14 +1450,15 @@ class _EventsScreenState extends State<EventsScreen> {
                         color: AppColors.primaryTeal,
                       ),
                       alignment: Alignment.center,
-                      child: profilePic != null
+                      child: profilePicBytes != null
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(19),
                               child: Image.memory(
-                                base64Decode(profilePic),
+                                profilePicBytes,
                                 width: 38,
                                 height: 38,
                                 fit: BoxFit.cover,
+                                gaplessPlayback: true,
                               ),
                             )
                           : Text(

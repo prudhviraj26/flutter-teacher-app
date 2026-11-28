@@ -1,6 +1,5 @@
 import '../services/notification_navigation_service.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../state/app_state.dart';
@@ -24,9 +23,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _isNavigating = true;
     Navigator.pushNamed(context, routeName).then((_) {
       if (mounted) {
-        setState(() {
-          _isNavigating = false;
-        });
+        _isNavigating = false;
       }
     });
   }
@@ -45,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
     // Auto-refresh chat conversations every 30s while active on HomeScreen
     _homePollingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) {
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
         final appState = Provider.of<AppState>(context, listen: false);
         if (appState.loggedIn) {
           appState.fetchParentConversations();
@@ -124,12 +121,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ],
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: appState.schoolLogoBase64 != null
+                      child: appState.schoolLogoBytes != null
                           ? Padding(
                               padding: const EdgeInsets.all(4),
                               child: Image.memory(
-                                base64Decode(appState.schoolLogoBase64!),
+                                appState.schoolLogoBytes!,
                                 fit: BoxFit.contain,
+                                gaplessPlayback: true,
                               ),
                             )
                           : (appState.schoolLogoUrl != null && appState.schoolLogoUrl!.isNotEmpty
@@ -138,6 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   child: Image.network(
                                     appState.schoolLogoUrl!,
                                     fit: BoxFit.contain,
+                                    gaplessPlayback: true,
                                     errorBuilder: (context, error, stackTrace) => const Icon(
                                       Icons.school,
                                       color: AppColors.primary,
@@ -219,12 +218,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         child: CircleAvatar(
                           backgroundColor: Colors.white,
                           foregroundColor: AppColors.primary,
-                          backgroundImage: appState.profilePic != null
-                              ? MemoryImage(base64Decode(appState.profilePic!))
-                              : (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
+                          backgroundImage: appState.profilePicProvider ??
+                              (teacher.photoUrl != null && teacher.photoUrl!.isNotEmpty
                                   ? NetworkImage(teacher.photoUrl!)
                                   : null) as ImageProvider?,
-                          child: (appState.profilePic == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
+                          child: (appState.profilePicProvider == null && (teacher.photoUrl == null || teacher.photoUrl!.isEmpty))
                               ? Text(
                                   teacher.name.isNotEmpty ? teacher.name[0] : 'T',
                                   style: const TextStyle(

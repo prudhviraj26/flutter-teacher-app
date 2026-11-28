@@ -1,11 +1,11 @@
-import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../constants/colors.dart';
 
 class FullScreenPhotoViewer extends StatelessWidget {
   final String title;
   final String? subtitle;
-  final String? base64Image;
+  final Uint8List? imageBytes;
   final String? photoUrl;
   final VoidCallback? onChangePhoto;
 
@@ -13,14 +13,14 @@ class FullScreenPhotoViewer extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
-    this.base64Image,
+    this.imageBytes,
     this.photoUrl,
     this.onChangePhoto,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasBase64 = base64Image != null && base64Image!.isNotEmpty;
+    final hasBytes = imageBytes != null && imageBytes!.isNotEmpty;
     final hasUrl = photoUrl != null && photoUrl!.isNotEmpty;
 
     return Scaffold(
@@ -33,16 +33,18 @@ class FullScreenPhotoViewer extends StatelessWidget {
               minScale: 1.0,
               maxScale: 4.0,
               clipBehavior: Clip.none,
-              child: hasBase64
+              child: hasBytes
                   ? Image.memory(
-                      base64Decode(base64Image!),
+                      imageBytes!,
                       fit: BoxFit.contain,
+                      gaplessPlayback: true,
                       errorBuilder: (context, error, stackTrace) => _buildPlaceholder(),
                     )
                   : (hasUrl
                       ? Image.network(
                           photoUrl!,
                           fit: BoxFit.contain,
+                          gaplessPlayback: true,
                           loadingBuilder: (context, child, loadingProgress) {
                             if (loadingProgress == null) return child;
                             return const Center(

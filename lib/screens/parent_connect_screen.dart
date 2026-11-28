@@ -30,7 +30,6 @@ class _ParentConnectScreenState extends State<ParentConnectScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<AppState>(context, listen: false);
-      appState.refreshBroadcasts();
       appState.loadLiveData();
     });
     // Smart auto-polling: refresh conversation list every 8 seconds while screen is open

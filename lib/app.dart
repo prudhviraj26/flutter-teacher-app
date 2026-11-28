@@ -1,7 +1,5 @@
 import 'services/notification_navigation_service.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'state/app_state.dart';
 import 'constants/colors.dart';
 
 // Screens
@@ -29,9 +27,7 @@ class TeacherApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, appState, child) {
-        return MaterialApp(
+    return MaterialApp(
           navigatorKey: NotificationNavigationService.navigatorKey,
           title: 'School Teacher App',
           debugShowCheckedModeBanner: false,
@@ -111,7 +107,5 @@ class TeacherApp extends StatelessWidget {
             return null;
           },
         );
-      },
-    );
   }
 }
